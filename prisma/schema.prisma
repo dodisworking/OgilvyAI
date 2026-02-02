@@ -1,0 +1,298 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AccountType {
+  PRODUCER
+  CREATIVE
+  CLIENT
+  OTHER
+}
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  password      String?   // Store plain text password for Isaac Mode
+  name          String
+  profilePicture String?  // URL or path to profile picture
+  avatarData    Json?     // Custom avatar data (hair, skin, clothes, etc.)
+  accountType   AccountType @default(OTHER) // Producer, Creative, Client, Other
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  requests      Request[]
+  drowningRequests DrowningRequest[]
+  virtualOfficeCheckIn VirtualOfficeCheckIn?
+  boardomaticProjects BoardomaticProject[]
+  productionSchedules ProductionSchedule[]
+  suggestions        Suggestion[]
+
+  @@map("users")
+}
+
+model Request {
+  id          String        @id @default(cuid())
+  userId      String
+  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startDate   DateTime
+  endDate     DateTime
+  requestType RequestType
+  title       String?
+  reason      String?
+  status      RequestStatus @default(PENDING)
+  adminNotes  String?
+  dayBreakdown Json?        // Store which days are TIME_OFF vs WFH (format: {"2024-01-15": "TIME_OFF", "2024-01-16": "WFH"})
+  createdAt   DateTime      @default(now())
+  updatedAt   DateTime      @updatedAt
+
+  @@map("requests")
+}
+
+model Admin {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String
+  password     String?  // Store plain text password for Isaac Mode
+  name         String   @default("Tim")
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  @@map("admins")
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  userType  UserType
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([token])
+  @@index([userId])
+  @@map("sessions")
+}
+
+model DrowningRequest {
+  id          String    @id @default(cuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  startDate   DateTime
+  endDate     DateTime
+  natureOfNeed String?  // What kind of help they need
+  dayBreakdown Json?    // Store which days need help (format: {"2024-01-15": true})
+  notifiedUsers Json?   // Array of user IDs who were notified about this request
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  @@map("drowning_requests")
+}
+
+enum RequestType {
+  WFH
+  TIME_OFF
+  BOTH
+}
+
+enum RequestStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum UserType {
+  USER
+  ADMIN
+}
+
+model VirtualOfficeCheckIn {
+  id            String   @id @default(cuid())
+  userId        String   @unique
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  teamsLink     String   // Full Teams meeting link or meeting ID
+  isCheckedIn   Boolean  @default(true)
+  checkInTime   DateTime @default(now())
+  x             Float?   // Position X on office map
+  y             Float?   // Position Y on office map
+  updatedAt     DateTime @updatedAt
+
+  @@map("virtual_office_checkins")
+}
+
+model BoardomaticProject {
+  id              String   @id @default(cuid())
+  userId          String
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title           String
+  script          String   // Full script text
+  totalDuration   Int      // Total duration in seconds (max 60 seconds = 1 minute for the boardomatic video)
+  status          BoardomaticStatus @default(DRAFT)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  shots           Shot[]
+  music           MusicDescription?
+  drawingStyle    DrawingStyle?
+  output          BoardomaticOutput?
+  
+  @@map("boardomatic_projects")
+}
+
+model Shot {
+  id              String   @id @default(cuid())
+  projectId       String
+  project         BoardomaticProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  shotNumber      Int      // Order of shot in sequence
+  sceneDescription String  // User's description of the scene
+  motionDescription String? // Description of movement/motion
+  duration        Int      // Duration in seconds
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  characters     Character[]
+  motionReview   MotionReview?
+  
+  @@map("shots")
+}
+
+model Character {
+  id              String   @id @default(cuid())
+  shotId          String
+  shot            Shot     @relation(fields: [shotId], references: [id], onDelete: Cascade)
+  characterNumber Int      // Order in shot
+  ethnicity       String?  // User-specified ethnicity
+  description     String?  // Additional character description
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("characters")
+}
+
+model MusicDescription {
+  id              String   @id @default(cuid())
+  projectId       String   @unique
+  project         BoardomaticProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  description     String   // Overall music description
+  tempoMarkers    Json?    // Array of {time: number, emotion: string, tempo: string}
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("music_descriptions")
+}
+
+model DrawingStyle {
+  id              String   @id @default(cuid())
+  projectId       String   @unique
+  project         BoardomaticProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  selectedStyleId String?  // ID of selected style reference
+  description     String?  // Additional style description
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  references      StyleReference[]
+  
+  @@map("drawing_styles")
+}
+
+model StyleReference {
+  id              String   @id @default(cuid())
+  drawingStyleId  String
+  drawingStyle    DrawingStyle @relation(fields: [drawingStyleId], references: [id], onDelete: Cascade)
+  imageUrl        String   // Path to uploaded reference image
+  description     String?  // User description of this style
+  isSelected      Boolean  @default(false)
+  createdAt       DateTime @default(now())
+  
+  @@map("style_references")
+}
+
+model MotionReview {
+  id              String   @id @default(cuid())
+  shotId          String   @unique
+  shot            Shot     @relation(fields: [shotId], references: [id], onDelete: Cascade)
+  reviewedMotion  String   // Final motion description after review
+  notes           String?  // User notes/edits
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("motion_reviews")
+}
+
+model BoardomaticOutput {
+  id              String   @id @default(cuid())
+  projectId       String   @unique
+  project         BoardomaticProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  videoUrl        String?  // Path to generated MP4
+  thumbnailUrl    String?  // Thumbnail image
+  status          OutputStatus @default(PENDING)
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  
+  @@map("boardomatic_outputs")
+}
+
+enum BoardomaticStatus {
+  DRAFT
+  SCRIPT_ADDED
+  SHOTS_CONFIGURED
+  CHARACTERS_ADDED
+  STYLE_SELECTED
+  MUSIC_ADDED
+  MOTION_REVIEWED
+  READY_TO_GENERATE
+  GENERATING
+  COMPLETED
+}
+
+enum OutputStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+model ProductionSchedule {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String   // Timeline name
+  brushes     Json     // Array of brush objects
+  schedule    Json     // Record of schedule days
+  glueGroups  Json     // Record of glue groups
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId])
+  @@map("production_schedules")
+}
+
+enum SuggestionType {
+  SUGGESTION
+  BUG
+  IDEA
+}
+
+model Suggestion {
+  id            String         @id @default(cuid())
+  type          SuggestionType // Suggestion, Bug/Error, Feature idea
+  content       String         @db.Text
+  userId        String?        // Optional: set if user is logged in
+  user          User?         @relation(fields: [userId], references: [id], onDelete: SetNull)
+  submitterName String?        // Optional: for anonymous submissions
+  submitterEmail String?       // Optional: for anonymous submissions
+  createdAt     DateTime      @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([createdAt])
+  @@map("suggestions")
+}
