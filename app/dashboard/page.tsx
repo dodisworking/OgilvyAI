@@ -349,6 +349,7 @@ export default function Dashboard() {
               icon={<div className="w-12 h-12 rounded-full bg-gradient-to-r from-violet-300 to-fuchsia-400 dark:from-violet-600 dark:to-fuchsia-700 mx-auto flex items-center justify-center text-2xl">✨</div>}
               onClick={() => router.push('/talent-tracker')}
               gradient="bg-gradient-to-r from-violet-500 to-fuchsia-500"
+              inDevelopment
             />
           </div>
 
