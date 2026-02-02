@@ -110,7 +110,7 @@ export default function CheckInModal({ onCheckIn, onClose, existingLink }: Check
               className="w-full px-4 py-3 rounded-lg border-2 border-purple-200 focus:border-purple-500 focus:outline-none transition-colors"
             />
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              Just the meeting ID (we'll create the link for you)
+              Just the meeting ID (we&apos;ll create the link for you)
             </p>
           </div>
 

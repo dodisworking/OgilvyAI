@@ -496,7 +496,7 @@ export default function Dashboard() {
             >
               ×
             </button>
-            <h2 className="text-xl font-bold mb-4 text-blue-600 dark:text-blue-400">🆘 I'm Drowning</h2>
+            <h2 className="text-xl font-bold mb-4 text-blue-600 dark:text-blue-400">🆘 I&apos;m Drowning</h2>
             <DrowningCalendar
               userName={user?.name || ''}
               onDatesSelected={async (data) => {

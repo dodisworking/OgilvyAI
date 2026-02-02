@@ -66,14 +66,14 @@ export async function GET(request: NextRequest) {
       }
 
       // #region agent log
-      fetch('http://127.0.0.1:7247/ingest/296b3045-74d1-4efe-a041-a61e579682c1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/auth/me/route.ts:42',message:'Returning user data',data:{userId:user.id,hasAvatarData:!!user.avatarData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+      fetch('http://127.0.0.1:7247/ingest/296b3045-74d1-4efe-a041-a61e579682c1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/auth/me/route.ts:42',message:'Returning user data',data:{userId:user.id,hasAvatarData:!!(user as { avatarData?: unknown }).avatarData},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
       // #endregion
       return NextResponse.json({ user, isAdmin: false })
     }
   } catch (error) {
     console.error('Get user error:', error)
     // #region agent log
-    fetch('http://127.0.0.1:7247/ingest/296b3045-74d1-4efe-a041-a61e579682c1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/auth/me/route.ts:47',message:'Catch block - error occurred',data:{error:String(error),errorName:error?.name,errorMessage:error?.message,errorStack:error?.stack?.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
+    fetch('http://127.0.0.1:7247/ingest/296b3045-74d1-4efe-a041-a61e579682c1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/auth/me/route.ts:47',message:'Catch block - error occurred',data:{error:String(error),errorName:(error as Error)?.name,errorMessage:(error as Error)?.message,errorStack:(error as Error)?.stack?.substring(0,200)},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
     // #endregion
     return NextResponse.json(
       { error: 'Failed to get user' },

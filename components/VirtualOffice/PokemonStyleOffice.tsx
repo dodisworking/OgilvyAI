@@ -382,10 +382,9 @@ export default function PokemonStyleOffice() {
           </p>
         </div>
         <AvatarMaker
-          isOpen={true}
           onClose={() => {}}
           onSave={handleSaveAvatar}
-          initialAvatarData={null}
+          existingAvatar={null}
         />
       </div>
     )
@@ -614,14 +613,13 @@ export default function PokemonStyleOffice() {
       {/* Modals */}
       {showAvatarMaker && (
         <AvatarMaker
-          isOpen={showAvatarMaker}
           onClose={() => {
             if (myAvatarData) {
               setShowAvatarMaker(false)
             }
           }}
           onSave={handleSaveAvatar}
-          initialAvatarData={myAvatarData}
+          existingAvatar={myAvatarData}
         />
       )}
 

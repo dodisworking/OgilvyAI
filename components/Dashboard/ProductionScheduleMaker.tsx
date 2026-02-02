@@ -992,6 +992,10 @@ export default function ProductionScheduleMaker() {
         lastGlueDragDate: null,
         sourceBrushes: [day.brushes[0]], // Default to first brush
         sourceBrushIndex: 0, // Default to first brush
+        sourceBrushIndices: null,
+        sourceBrushGlueIds: null,
+        connectedDates: null,
+        sourceDateStr: dateStr,
         dragStartTime: Date.now(),
         mouseX: e.clientX,
         mouseY: e.clientY,
@@ -1022,7 +1026,15 @@ export default function ProductionScheduleMaker() {
         mouseMoved: false,
         lastGlueDragDate: null,
         sourceBrushes: null,
+        sourceBrushIndex: null,
+        sourceBrushIndices: null,
+        sourceBrushGlueIds: null,
+        connectedDates: null,
+        sourceDateStr: dateStr,
         dragStartTime: null,
+        mouseX: null,
+        mouseY: null,
+        isHolding: false,
       }
       return
     }
@@ -1037,7 +1049,15 @@ export default function ProductionScheduleMaker() {
         mouseMoved: false,
         lastGlueDragDate: null,
         sourceBrushes: null,
+        sourceBrushIndex: null,
+        sourceBrushIndices: null,
+        sourceBrushGlueIds: null,
+        connectedDates: null,
+        sourceDateStr: dateStr,
         dragStartTime: null,
+        mouseX: null,
+        mouseY: null,
+        isHolding: false,
       }
     }
   }, [selectedBrush, isGlueMode, schedule, handleStripeMouseDown])
@@ -1449,8 +1469,9 @@ export default function ProductionScheduleMaker() {
               }
               
               // If still missing, use the source brush as fallback (for merged blocks)
-              if (!brushIdToUse && day.brushes[brushIndex]) {
-                brushIdToUse = day.brushes[brushIndex]
+              const sourceDay = prev[sourceDateStr]
+              if (!brushIdToUse && sourceDay?.brushes[connectedDate.brushIndex]) {
+                brushIdToUse = sourceDay.brushes[connectedDate.brushIndex]
               }
               
               const glueId = connectedDay?.brushGlueIds?.[connectedDate.brushIndex]
@@ -1951,6 +1972,17 @@ export default function ProductionScheduleMaker() {
       isGlueDrag: false,
       glueGroupId: null,
       mouseMoved: false,
+      lastGlueDragDate: null,
+      sourceBrushes: null,
+      sourceBrushIndex: null,
+      sourceBrushIndices: null,
+      sourceBrushGlueIds: null,
+      connectedDates: null,
+      sourceDateStr: null,
+      dragStartTime: null,
+      mouseX: null,
+      mouseY: null,
+      isHolding: false,
     }
     
     const day = getScheduleDay(dateStr)
@@ -2519,10 +2551,6 @@ export default function ProductionScheduleMaker() {
         setCurrentMonth(startOfMonth(startMonth))
         setShowTimelineList(false)
         setHasUnsavedChanges(false)
-        // Focus on calendar when new timeline is created
-        setTimeout(() => {
-          calendarRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })
-        }, 100)
       } else {
         const errorMessage = responseData.error || responseData.details || 'Unknown error'
         console.error('Failed to create timeline:', errorMessage)
