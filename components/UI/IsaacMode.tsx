@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import Button from './Button'
 
 interface User {
@@ -17,8 +17,13 @@ interface IsaacModeData {
   admins: User[]
 }
 
+const ISAAC_MODE_PASSWORD = 'Igomoonnasa'
+
 export default function IsaacMode() {
   const [isOpen, setIsOpen] = useState(false)
+  const [isUnlocked, setIsUnlocked] = useState(false)
+  const [passwordInput, setPasswordInput] = useState('')
+  const [passwordError, setPasswordError] = useState<string | null>(null)
   const [data, setData] = useState<IsaacModeData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -51,9 +56,28 @@ export default function IsaacMode() {
 
   const handleOpen = () => {
     setIsOpen(true)
-    if (!data) {
-      fetchData()
+    setIsUnlocked(false)
+    setPasswordInput('')
+    setPasswordError(null)
+  }
+
+  const handleUnlock = (e: React.FormEvent) => {
+    e.preventDefault()
+    setPasswordError(null)
+    if (passwordInput === ISAAC_MODE_PASSWORD) {
+      setIsUnlocked(true)
+      setPasswordInput('')
+      if (!data) fetchData()
+    } else {
+      setPasswordError('Incorrect password')
     }
+  }
+
+  const handleClose = () => {
+    setIsOpen(false)
+    setIsUnlocked(false)
+    setPasswordInput('')
+    setPasswordError(null)
   }
 
   return (
@@ -76,14 +100,14 @@ export default function IsaacMode() {
               <div className="flex justify-between items-center">
                 <div>
                   <h2 className="text-2xl font-bold bg-gradient-to-r from-yellow-400 to-yellow-600 bg-clip-text text-transparent">
-                    ⭐ Isaac Mode - All Logins
+                    ⭐ Isaac Mode
                   </h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    All registered users and admins
+                    {isUnlocked ? 'All registered users and admins' : 'Enter password to view logins'}
                   </p>
                 </div>
                 <button
-                  onClick={() => setIsOpen(false)}
+                  onClick={handleClose}
                   className="text-gray-400 hover:text-gray-600 text-2xl"
                 >
                   ×
@@ -91,6 +115,29 @@ export default function IsaacMode() {
               </div>
             </div>
 
+            {!isUnlocked ? (
+              <div className="p-6">
+                <form onSubmit={handleUnlock} className="space-y-4 max-w-sm">
+                  <label htmlFor="isaac-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Password
+                  </label>
+                  <input
+                    id="isaac-password"
+                    type="password"
+                    value={passwordInput}
+                    onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(null) }}
+                    placeholder="Enter password"
+                    className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
+                    autoFocus
+                  />
+                  {passwordError && (
+                    <p className="text-sm text-red-600 dark:text-red-400">{passwordError}</p>
+                  )}
+                  <Button type="submit">Unlock</Button>
+                </form>
+              </div>
+            ) : (
+            <>
             {/* Content */}
             <div className="p-6 overflow-y-auto flex-1">
               {error && (
@@ -198,13 +245,15 @@ export default function IsaacMode() {
 
             {/* Footer */}
             <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-end">
-              <Button variant="outline" onClick={() => setIsOpen(false)}>
+              <Button variant="outline" onClick={handleClose}>
                 Close
               </Button>
               <Button onClick={fetchData} className="ml-3" isLoading={isLoading}>
                 Refresh
               </Button>
             </div>
+            </>
+            )}
           </div>
         </div>
       )}

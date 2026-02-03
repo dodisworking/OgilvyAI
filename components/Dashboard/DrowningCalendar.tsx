@@ -3,11 +3,13 @@
 import { useState, useMemo, useEffect } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, isToday } from 'date-fns'
 
+type DrowningRecipientUser = { id: string; name: string; email: string }
+
 interface DrowningCalendarProps {
   userName?: string
   initialSelectedDays?: Set<string>
   initialNatureOfNeed?: string
-  onDatesSelected: (dates: { startDate: Date; endDate: Date; natureOfNeed?: string; dayBreakdown?: Record<string, boolean>; sendToAll?: boolean }) => void
+  onDatesSelected: (dates: { startDate: Date; endDate: Date; natureOfNeed?: string; dayBreakdown?: Record<string, boolean>; sendToAll?: boolean; selectedUserIds?: string[] }) => void
   onCancel: () => void
 }
 
@@ -17,7 +19,10 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
   const [isDragging, setIsDragging] = useState(false)
   const [showReview, setShowReview] = useState(false)
   const [natureOfNeed, setNatureOfNeed] = useState(initialNatureOfNeed || '')
-  const [sendToAll, setSendToAll] = useState(false)
+  const [sendToAll, setSendToAll] = useState(true)
+  const [selectedUserIds, setSelectedUserIds] = useState<Set<string>>(new Set())
+  const [users, setUsers] = useState<DrowningRecipientUser[]>([])
+  const [usersLoading, setUsersLoading] = useState(false)
   const [mouseDownDay, setMouseDownDay] = useState<Date | null>(null)
   const [hasMouseMoved, setHasMouseMoved] = useState(false)
 
@@ -25,6 +30,13 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
     setSelectedDays(initialSelectedDays || new Set())
     setNatureOfNeed(initialNatureOfNeed || '')
   }, [initialSelectedDays, initialNatureOfNeed])
+
+  useEffect(() => {
+    if (showReview && !sendToAll && users.length === 0 && !usersLoading) {
+      fetchUsers()
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only fetch when switching to "select" or opening review
+  }, [showReview, sendToAll])
 
   const monthStart = startOfMonth(currentMonth)
   const monthEnd = endOfMonth(currentMonth)
@@ -114,6 +126,10 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
   }
 
   const handleConfirmSubmit = () => {
+    if (!sendToAll && selectedUserIds.size === 0) {
+      alert('Please select at least one person to notify, or choose "Send SOS to everyone".')
+      return
+    }
     const allSelectedDates = Array.from(selectedDays)
       .map(dateStr => new Date(dateStr))
       .sort((a, b) => a.getTime() - b.getTime())
@@ -133,6 +149,31 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
       natureOfNeed: natureOfNeed || undefined,
       dayBreakdown,
       sendToAll,
+      selectedUserIds: sendToAll ? undefined : Array.from(selectedUserIds),
+    })
+  }
+
+  const fetchUsers = async () => {
+    setUsersLoading(true)
+    try {
+      const res = await fetch('/api/users', { credentials: 'include' })
+      if (res.ok) {
+        const data = await res.json()
+        setUsers(data.users || [])
+      }
+    } catch {
+      setUsers([])
+    } finally {
+      setUsersLoading(false)
+    }
+  }
+
+  const toggleRecipient = (id: string) => {
+    setSelectedUserIds((prev) => {
+      const next = new Set(prev)
+      if (next.has(id)) next.delete(id)
+      else next.add(id)
+      return next
     })
   }
 
@@ -214,24 +255,69 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
             />
           </div>
 
-          {/* Send to Whole Department Option */}
-          <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-2 border-blue-200 dark:border-blue-700">
-            <label className="flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={sendToAll}
-                onChange={(e) => setSendToAll(e.target.checked)}
-                className="mr-3 h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <div>
-                <p className="font-semibold text-blue-800 dark:text-blue-200 text-sm">
-                  📧 Send SOS Email to Whole Department
-                </p>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                  Notify everyone about your rescue mission! They&apos;ll get a fun email asking if they&apos;re up for the task.
-                </p>
+          {/* Who to notify: everyone or select group */}
+          <div className="mb-6 space-y-4">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300">Who should receive the SOS email?</p>
+            <div className="p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-2 border-blue-200 dark:border-blue-700 space-y-3">
+              <label className="flex items-start cursor-pointer gap-3">
+                <input
+                  type="radio"
+                  name="sosRecipients"
+                  checked={sendToAll}
+                  onChange={() => setSendToAll(true)}
+                  className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                />
+                <div>
+                  <p className="font-semibold text-blue-800 dark:text-blue-200 text-sm">
+                    📧 Send SOS to everyone
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                    Notify the whole department. They&apos;ll get an email asking if they&apos;re up for the task.
+                  </p>
+                </div>
+              </label>
+              <label className="flex items-start cursor-pointer gap-3">
+                <input
+                  type="radio"
+                  name="sosRecipients"
+                  checked={!sendToAll}
+                  onChange={() => setSendToAll(false)}
+                  className="mt-1 h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300"
+                />
+                <div className="flex-1">
+                  <p className="font-semibold text-blue-800 dark:text-blue-200 text-sm">
+                    👥 Select what group of people you want to send it to
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-0.5">
+                    Choose who receives the rescue mission email.
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {!sendToAll && (
+              <div className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700 max-h-48 overflow-y-auto">
+                {usersLoading ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">Loading people...</p>
+                ) : users.length === 0 ? (
+                  <p className="text-sm text-gray-500 dark:text-gray-400">No users found.</p>
+                ) : (
+                  <div className="space-y-2">
+                    {users.map((u) => (
+                      <label key={u.id} className="flex items-center gap-2 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedUserIds.has(u.id)}
+                          onChange={() => toggleRecipient(u.id)}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                        />
+                        <span className="text-sm text-gray-800 dark:text-gray-200">{u.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                )}
               </div>
-            </label>
+            )}
           </div>
 
           <div className="flex gap-4">
@@ -243,7 +329,8 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
             </button>
             <button
               onClick={handleConfirmSubmit}
-              className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-700 hover:to-cyan-700 shadow-lg hover:shadow-xl transition-all font-medium"
+              disabled={!sendToAll && selectedUserIds.size === 0}
+              className="flex-1 px-4 py-3 rounded-lg bg-gradient-to-r from-blue-600 to-cyan-600 text-white hover:from-blue-700 hover:to-cyan-700 shadow-lg hover:shadow-xl transition-all font-medium disabled:opacity-50 disabled:cursor-not-allowed"
             >
               🆘 Send SOS
             </button>

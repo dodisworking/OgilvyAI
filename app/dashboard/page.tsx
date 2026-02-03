@@ -308,6 +308,7 @@ export default function Dashboard() {
                 setShowDrowningRequests(false)
               }}
               gradient="bg-gradient-to-r from-indigo-500 to-purple-500"
+              inDevelopment
             />
           </div>
 
@@ -515,6 +516,7 @@ export default function Dashboard() {
                       natureOfNeed: data.natureOfNeed,
                       dayBreakdown: data.dayBreakdown,
                       sendToAll: data.sendToAll,
+                      userIds: data.selectedUserIds,
                     }),
                   })
 

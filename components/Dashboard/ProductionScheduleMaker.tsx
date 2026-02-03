@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useCallback, useRef, useEffect } from 'react'
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths } from 'date-fns'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths, startOfWeek, parseISO, addWeeks } from 'date-fns'
 import TimelineList from './ProductionScheduleMaker/TimelineList'
 import NewTimelineModal from './ProductionScheduleMaker/NewTimelineModal'
 
@@ -18,6 +18,7 @@ interface ScheduleDay {
   glueId?: string // If part of a glued group (deprecated - use brushGlueIds)
   brushGlueIds?: Record<number, string> // Map of brush index to glue group ID
   customLabels?: Record<number, string> // Map of brush index to custom label
+  customColors?: Record<number, string> // Map of brush index to hex color override
 }
 
 interface GlueGroup {
@@ -46,6 +47,10 @@ export default function ProductionScheduleMaker() {
   const [aiInput, setAiInput] = useState('')
   const [isAILoading, setIsAILoading] = useState(false)
   const [aiError, setAiError] = useState<string | null>(null)
+  const [pdfPageImages, setPdfPageImages] = useState<string[]>([])
+  const [pdfFileName, setPdfFileName] = useState('')
+  const [isPdfLoading, setIsPdfLoading] = useState(false)
+  const pdfInputRef = useRef<HTMLInputElement>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false)
@@ -67,6 +72,8 @@ export default function ProductionScheduleMaker() {
   const [isCopyPasteMode, setIsCopyPasteMode] = useState(false) // Hand: copy color+label from one block, paste to another
   const [copyPasteCaptured, setCopyPasteCaptured] = useState<{ brushId: string; label: string; dateStr: string; brushIndex: number } | null>(null)
   const [isEraserMode, setIsEraserMode] = useState(false) // Soap: tap block to delete it
+  const [isPaintMode, setIsPaintMode] = useState(false) // 🖌️: select color then click blocks to change color
+  const [paintColor, setPaintColor] = useState('#3b82f6')
 
   // Default brushes
   const [brushes, setBrushes] = useState<Brush[]>([
@@ -100,6 +107,7 @@ export default function ProductionScheduleMaker() {
         brushes: [...sched[key].brushes],
         brushGlueIds: sched[key].brushGlueIds ? { ...sched[key].brushGlueIds } : undefined,
         customLabels: sched[key].customLabels ? { ...sched[key].customLabels } : undefined,
+        customColors: sched[key].customColors ? { ...sched[key].customColors } : undefined,
       }
     })
     return cloned
@@ -1995,6 +2003,21 @@ export default function ProductionScheduleMaker() {
     }
     if (brushIndex === null && day.brushes.length > 0) brushIndex = 0
     
+    // Paint mode - click block to apply selected color
+    if (isPaintMode) {
+      if (stripeElement && brushIndex !== null && day.brushes[brushIndex]) {
+        saveToHistory()
+        setSchedule(prev => {
+          const d = prev[dateStr]
+          if (!d) return prev
+          const customColors = { ...(d.customColors || {}), [brushIndex!]: paintColor }
+          return { ...prev, [dateStr]: { ...d, customColors } }
+        })
+        setHasUnsavedChanges(true)
+      }
+      return
+    }
+    
     // Soap (eraser) mode - tap block to delete it
     if (isEraserMode) {
       if (day.brushes.length === 0) return
@@ -2008,16 +2031,19 @@ export default function ProductionScheduleMaker() {
         const newBrushes = d.brushes.filter((_, i) => i !== brushIndex)
         const newBrushGlueIds: Record<number, string> = {}
         const newCustomLabels: Record<number, string> = {}
+        const newCustomColors: Record<number, string> = {}
         d.brushes.forEach((_, idx) => {
           if (idx < brushIndex!) {
             if (d.brushGlueIds?.[idx] !== undefined) newBrushGlueIds[idx] = d.brushGlueIds![idx]
             if (d.customLabels?.[idx] !== undefined) newCustomLabels[idx] = d.customLabels![idx]
+            if (d.customColors?.[idx] !== undefined) newCustomColors[idx] = d.customColors![idx]
           } else if (idx > brushIndex!) {
             if (d.brushGlueIds?.[idx] !== undefined) newBrushGlueIds[idx - 1] = d.brushGlueIds![idx]
             if (d.customLabels?.[idx] !== undefined) newCustomLabels[idx - 1] = d.customLabels![idx]
+            if (d.customColors?.[idx] !== undefined) newCustomColors[idx - 1] = d.customColors![idx]
           }
         })
-        const next = { ...prev, [dateStr]: { ...d, brushes: newBrushes, brushGlueIds: Object.keys(newBrushGlueIds).length > 0 ? newBrushGlueIds : undefined, customLabels: Object.keys(newCustomLabels).length > 0 ? newCustomLabels : undefined } }
+        const next = { ...prev, [dateStr]: { ...d, brushes: newBrushes, brushGlueIds: Object.keys(newBrushGlueIds).length > 0 ? newBrushGlueIds : undefined, customLabels: Object.keys(newCustomLabels).length > 0 ? newCustomLabels : undefined, customColors: Object.keys(newCustomColors).length > 0 ? newCustomColors : undefined } }
         return next
       })
       if (glueIdToRemove) {
@@ -2240,7 +2266,7 @@ export default function ProductionScheduleMaker() {
       // Simple click to paint - add brush immediately
       addBrushToDate(dateStr, selectedBrush)
     }
-  }, [isGlueMode, isEditMode, isUnmergeMode, isCopyPasteMode, copyPasteCaptured, isEraserMode, selectedBrush, getScheduleDay, glueGroups, mergeGlueGroups, activeGlueGroupId, addBrushToDate, saveToHistory, handleUnmergeClick, handleMergeClick, brushes])
+  }, [isGlueMode, isEditMode, isUnmergeMode, isCopyPasteMode, copyPasteCaptured, isEraserMode, isPaintMode, paintColor, selectedBrush, getScheduleDay, glueGroups, mergeGlueGroups, activeGlueGroupId, addBrushToDate, saveToHistory, handleUnmergeClick, handleMergeClick, brushes])
 
   // Handle saving custom label
   const handleSaveLabel = useCallback((dateStr: string, brushIndex: number, label: string) => {
@@ -2586,15 +2612,23 @@ export default function ProductionScheduleMaker() {
     setHasUnsavedChanges(false)
   }
 
-  // Handle AI schedule generation
+  // Handle AI schedule generation - send PDF/images to OpenAI once and apply schedule
   const handleAIGenerate = useCallback(async () => {
-    if (!aiInput.trim()) {
-      setAiError('Please enter your timeline directions')
+    const hasPdfImages = pdfPageImages.length > 0
+    const hasInput = aiInput.trim().length > 0
+    if (!hasPdfImages && !hasInput) {
+      setAiError('Please enter timeline directions and/or upload a PDF calendar')
       return
     }
 
     setIsAILoading(true)
     setAiError(null)
+
+    const fullPrompt = hasInput
+      ? aiInput.trim()
+      : (hasPdfImages
+          ? 'I uploaded images of a calendar/schedule. Look at each image and extract every date and activity. Return the schedule in the required JSON format.'
+          : '')
 
     try {
       const response = await fetch('/api/ai-schedule', {
@@ -2602,9 +2636,10 @@ export default function ProductionScheduleMaker() {
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
         body: JSON.stringify({
-          prompt: aiInput,
+          prompt: fullPrompt,
           currentMonth: currentMonth.toISOString(),
           brushes: brushes,
+          ...(hasPdfImages && { images: pdfPageImages }),
         }),
       })
 
@@ -2623,12 +2658,20 @@ export default function ProductionScheduleMaker() {
       // So the user can glue and move blocks around without duplication
       saveToHistory()
 
-      // Collect distinct "color keys" (label or activity) so each gets a unique color
+      // Sort by date first so we can propagate labels for merged runs when building colorKeySet
+      const sortedForKeys = [...(data.schedule || [])].filter(
+        (item: { date: string }) => item.date && /^\d{4}-\d{2}-\d{2}$/.test(item.date)
+      ).sort((a: { date: string }, b: { date: string }) => a.date.localeCompare(b.date))
+
       const colorKeySet = new Set<string>()
-      data.schedule.forEach((item: { date: string; stripes: Array<{ activity: string; label?: string; mergeWithPrevious?: boolean }> }) => {
+      const lastLabelByActivityForKeys: Record<string, string> = {}
+      sortedForKeys.forEach((item: { date: string; stripes: Array<{ activity: string; label?: string; mergeWithPrevious?: boolean }> }) => {
         if (!item.stripes) return
-        item.stripes.forEach((stripe: { activity: string; label?: string }) => {
-          const key = (stripe.label && stripe.label.trim()) ? stripe.label.trim() : stripe.activity
+        item.stripes.forEach((stripe: { activity: string; label?: string; mergeWithPrevious?: boolean }) => {
+          const key = (stripe.label && stripe.label.trim())
+            ? stripe.label.trim()
+            : (stripe.mergeWithPrevious ? (lastLabelByActivityForKeys[stripe.activity] ?? stripe.activity) : stripe.activity)
+          if (stripe.label && stripe.label.trim()) lastLabelByActivityForKeys[stripe.activity] = stripe.label.trim()
           colorKeySet.add(key)
         })
       })
@@ -2642,13 +2685,16 @@ export default function ProductionScheduleMaker() {
 
       const newSchedule: Record<string, ScheduleDay> = {}
 
-      data.schedule.forEach((item: { date: string; stripes: Array<{ activity: string; label?: string; mergeWithPrevious?: boolean }> }) => {
-        const dateStr = item.date
-        if (!dateStr || !/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
-          console.warn('Invalid date format:', dateStr)
-          return
-        }
+      // Sort by date so we process in chronological order (needed for mergeWithPrevious)
+      const sortedSchedule = [...data.schedule].filter(
+        (item: { date: string }) => item.date && /^\d{4}-\d{2}-\d{2}$/.test(item.date)
+      ).sort((a: { date: string }, b: { date: string }) => a.date.localeCompare(b.date))
 
+      // Track the last label seen per activity so merged continuation days get the same label (and colorKey)
+      const lastLabelByActivity: Record<string, string> = {}
+
+      sortedSchedule.forEach((item: { date: string; stripes: Array<{ activity: string; label?: string; mergeWithPrevious?: boolean }> }) => {
+        const dateStr = item.date
         const day: ScheduleDay = {
           date: dateStr,
           brushes: [],
@@ -2656,16 +2702,24 @@ export default function ProductionScheduleMaker() {
         }
 
         item.stripes.forEach((stripe, stripeIndex) => {
-          const colorKey = (stripe.label && stripe.label.trim()) ? stripe.label.trim() : stripe.activity
+          // For mergeWithPrevious stripes without a label, use the same label as the first day of the run so title and color match
+          const effectiveLabel = (stripe.label && stripe.label.trim())
+            ? stripe.label.trim()
+            : (stripe.mergeWithPrevious ? (lastLabelByActivity[stripe.activity] ?? stripe.activity) : stripe.activity)
+          if (stripe.label && stripe.label.trim()) {
+            lastLabelByActivity[stripe.activity] = stripe.label.trim()
+          } else if (stripe.mergeWithPrevious && lastLabelByActivity[stripe.activity]) {
+            // Keep same run label; already set above
+          }
+
+          const colorKey = effectiveLabel
           const brushId = labelToBrushId[colorKey]
           if (!brushId) {
             const fallback = brushes.find(b => b.name === stripe.activity)
             if (fallback) {
               day.brushes.push(fallback.id)
-              if (stripe.label) {
-                day.customLabels = day.customLabels || {}
-                day.customLabels[stripeIndex] = stripe.label
-              }
+              day.customLabels = day.customLabels || {}
+              day.customLabels[stripeIndex] = effectiveLabel
             } else {
               console.warn(`Brush not found for activity: ${stripe.activity}`)
             }
@@ -2673,11 +2727,8 @@ export default function ProductionScheduleMaker() {
           }
 
           day.brushes.push(brushId)
-
-          if (stripe.label) {
-            day.customLabels = day.customLabels || {}
-            day.customLabels[stripeIndex] = stripe.label
-          }
+          day.customLabels = day.customLabels || {}
+          day.customLabels[stripeIndex] = effectiveLabel
         })
 
         if (day.brushes.length > 0) {
@@ -2685,15 +2736,62 @@ export default function ProductionScheduleMaker() {
         }
       })
 
-      // Apply schedule with no glue/merge - every block is independent
+      // Second pass: apply mergeWithPrevious → glue groups + mergeGlueGroups so bars render as one merged block (use same label as first pass so run is grouped correctly)
+      const newGlueGroups: Record<string, GlueGroup> = {}
+      const newMergeGlueGroups = new Set<string>()
+      type ColorKeyState = { lastDateStr: string; lastBrushIndex: number; activeGlueId: string | null }
+      const perColorKey: Record<string, ColorKeyState> = {}
+
+      sortedSchedule.forEach((item: { date: string; stripes: Array<{ activity: string; label?: string; mergeWithPrevious?: boolean }> }) => {
+        const dateStr = item.date
+        const day = newSchedule[dateStr]
+        if (!day) return
+
+        item.stripes.forEach((stripe, stripeIndex) => {
+          const colorKey = (day.customLabels && day.customLabels[stripeIndex]) ? day.customLabels[stripeIndex] : ((stripe.label && stripe.label.trim()) ? stripe.label.trim() : stripe.activity)
+          const state = perColorKey[colorKey]
+
+          if (stripe.mergeWithPrevious && state) {
+            const { lastDateStr, lastBrushIndex, activeGlueId } = state
+            const prevDay = newSchedule[lastDateStr]
+            if (prevDay) {
+              if (activeGlueId) {
+                newGlueGroups[activeGlueId].dates.push(dateStr)
+                day.brushGlueIds = { ...day.brushGlueIds, [stripeIndex]: activeGlueId }
+              } else {
+                const glueId = `ai-merge-${Date.now()}-${colorKey.replace(/\s+/g, '-')}-${Math.random().toString(36).slice(2, 9)}`
+                newGlueGroups[glueId] = { id: glueId, dates: [lastDateStr, dateStr] }
+                if (!prevDay.brushGlueIds) prevDay.brushGlueIds = {}
+                prevDay.brushGlueIds[lastBrushIndex] = glueId
+                day.brushGlueIds = { ...day.brushGlueIds, [stripeIndex]: glueId }
+                newMergeGlueGroups.add(glueId)
+                perColorKey[colorKey] = { lastDateStr: dateStr, lastBrushIndex: stripeIndex, activeGlueId: glueId }
+                return
+              }
+            }
+          }
+
+          if (!stripe.mergeWithPrevious && state) {
+            perColorKey[colorKey] = { ...state, activeGlueId: null }
+          }
+          perColorKey[colorKey] = {
+            lastDateStr: dateStr,
+            lastBrushIndex: stripeIndex,
+            activeGlueId: (stripe.mergeWithPrevious && state?.activeGlueId) ? state.activeGlueId : null,
+          }
+        })
+      })
+
       setSchedule(newSchedule)
-      setGlueGroups({})
-      setMergeGlueGroups(new Set())
+      setGlueGroups(newGlueGroups)
+      setMergeGlueGroups(newMergeGlueGroups)
       setHasUnsavedChanges(true)
       
-      // Close modal and clear input
+      // Close modal and clear input and recognition
       setShowAIModal(false)
       setAiInput('')
+      setPdfPageImages([])
+      setPdfFileName('')
       setAiError(null)
     } catch (error: any) {
       console.error('Error generating AI schedule:', error)
@@ -2701,7 +2799,57 @@ export default function ProductionScheduleMaker() {
     } finally {
       setIsAILoading(false)
     }
-  }, [aiInput, currentMonth, brushes, saveToHistory, format])
+  }, [aiInput, pdfPageImages, currentMonth, brushes, saveToHistory, format])
+
+  // Render PDF to images in browser and send to OpenAI Vision
+  const handlePdfUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || file.type !== 'application/pdf') {
+      setAiError(file ? 'Please select a PDF file' : null)
+      return
+    }
+    setAiError(null)
+    setIsPdfLoading(true)
+    setPdfPageImages([])
+    setPdfFileName(file.name)
+    try {
+      const arrayBuffer = await file.arrayBuffer()
+      const pdfjsLib = await import('pdfjs-dist')
+      pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/4.0.379/pdf.worker.min.mjs'
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise
+      const numPages = Math.min(pdf.numPages, 15)
+      const scale = 1.5
+      const dataUrls: string[] = []
+      for (let i = 1; i <= numPages; i++) {
+        const page = await pdf.getPage(i)
+        const viewport = page.getViewport({ scale })
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        if (!ctx) continue
+        canvas.width = viewport.width
+        canvas.height = viewport.height
+        const renderTask = page.render({
+          canvasContext: ctx,
+          viewport,
+        })
+        await (renderTask.promise ?? renderTask)
+        dataUrls.push(canvas.toDataURL('image/png'))
+      }
+      setPdfPageImages(dataUrls)
+    } catch (error: any) {
+      setAiError(error?.message || 'Failed to read PDF')
+      setPdfFileName('')
+    } finally {
+      setIsPdfLoading(false)
+      if (pdfInputRef.current) pdfInputRef.current.value = ''
+    }
+  }, [])
+
+  const clearPdf = useCallback(() => {
+    setPdfPageImages([])
+    setPdfFileName('')
+    if (pdfInputRef.current) pdfInputRef.current.value = ''
+  }, [])
 
   // Save schedule to database
   const handleSave = async () => {
@@ -2724,6 +2872,10 @@ export default function ProductionScheduleMaker() {
           // Ensure customLabels is properly formatted
           customLabels: day.customLabels && Object.keys(day.customLabels).length > 0 
             ? day.customLabels 
+            : undefined,
+          // Ensure customColors is properly formatted
+          customColors: day.customColors && Object.keys(day.customColors).length > 0 
+            ? day.customColors 
             : undefined,
         }
         return acc
@@ -2762,6 +2914,41 @@ export default function ProductionScheduleMaker() {
       setIsSaving(false)
     }
   }
+
+  // Export schedule to Excel (CSV - opens in Excel)
+  const handleExportToExcel = useCallback(() => {
+    const dateStrs = Object.keys(schedule).sort()
+    if (dateStrs.length === 0) {
+      alert('No schedule data to export')
+      return
+    }
+    const maxStripes = Math.max(0, ...dateStrs.map(d => (schedule[d]?.brushes?.length || 0)))
+    const header = ['Date', ...Array.from({ length: maxStripes }, (_, i) => `Task ${i + 1}`)]
+    const rows: string[][] = [header]
+    dateStrs.forEach(dateStr => {
+      const day = schedule[dateStr]
+      const labels: string[] = []
+      for (let i = 0; i < maxStripes; i++) {
+        const brushId = day?.brushes?.[i]
+        const customLabel = day?.customLabels?.[i]
+        const brushName = brushId ? brushes.find(b => b.id === brushId)?.name ?? '' : ''
+        labels.push(customLabel || brushName || '')
+      }
+      rows.push([dateStr, ...labels])
+    })
+    const escape = (v: string) => {
+      if (/[",\n\r]/.test(v)) return `"${v.replace(/"/g, '""')}"`
+      return v
+    }
+    const csv = rows.map(row => row.map(escape).join(',')).join('\r\n')
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${(currentTimelineTitle || 'production-schedule').replace(/[^a-z0-9-_]/gi, '-')}-${format(new Date(), 'yyyy-MM-dd')}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+  }, [schedule, brushes, currentTimelineTitle, format])
 
   // Create new brush
   const handleCreateBrush = () => {
@@ -2854,9 +3041,24 @@ export default function ProductionScheduleMaker() {
           const brush = brushes.find(b => b.id === brushId)
           if (!brush) return null
           
+          const glueId = brushGlueIds[index]
+          const glueGroup = glueId ? glueGroups[glueId] : null
+          const mergedDates = glueGroup?.dates ? [...glueGroup.dates].sort() : []
+          const isFirstDayOfMergedBlock = mergedDates.length > 0 && dateStr === mergedDates[0]
+          const weekStart = mergedDates.length > 0 ? startOfWeek(parseISO(dateStr), { weekStartsOn: 0 }) : null
+          const weekEnd = weekStart ? addWeeks(weekStart, 1) : null
+          const firstDateInThisWeek = mergedDates.length > 0 && weekStart && weekEnd
+            ? mergedDates.find(d => {
+                const t = parseISO(d).getTime()
+                return t >= weekStart.getTime() && t < weekEnd.getTime()
+              })
+            : undefined
+          const isFirstDayOfWeekInBlock = firstDateInThisWeek !== undefined && dateStr === firstDateInThisWeek
+          const showLabelHere = isFirstDayOfMergedBlock || isFirstDayOfWeekInBlock
           const customLabels = day.customLabels || {}
           const customLabel = customLabels[index]
           const displayLabel = customLabel || brush.name
+          const showMergedLabel = showLabelHere ? displayLabel : ''
           const isEditing = editingDate?.dateStr === dateStr && editingDate?.brushIndex === index
           const isSelectedForMerge = isMergeMode && pendingMergeSelections.some(
             sel => sel.dateStr === dateStr && sel.brushIndex === index
@@ -2867,11 +3069,11 @@ export default function ProductionScheduleMaker() {
             <div
               key={`merged-${brushId}-${index}`}
               data-brush-index={index}
-              className={`flex items-center justify-center px-1 relative ${isGlueMode && !isEditMode && !isMergeMode ? 'pointer-events-auto cursor-grab' : isEditMode ? 'pointer-events-auto cursor-pointer' : isMergeMode ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'} ${isSelectedForMerge ? 'ring-2 ring-green-400 ring-offset-1' : ''} ${isCopied ? 'ring-2 ring-purple-500 ring-offset-1 shadow-lg' : ''}`}
+              className={`flex items-center justify-center px-1 relative ${isGlueMode && !isEditMode && !isMergeMode ? 'pointer-events-auto cursor-grab' : isEditMode ? 'pointer-events-auto cursor-pointer' : isMergeMode ? 'pointer-events-auto cursor-pointer' : isPaintMode ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'} ${isSelectedForMerge ? 'ring-2 ring-green-400 ring-offset-1' : ''} ${isCopied ? 'ring-2 ring-purple-500 ring-offset-1 shadow-lg' : ''}`}
               style={{
                 height: `${mergedStripeHeight}%`,
                 width: '100%',
-                backgroundColor: brush.color,
+                backgroundColor: (day.customColors && day.customColors[index]) || brush.color,
                 color: '#fff',
                 position: 'absolute',
                 top: `${mergedIdx * mergedStripeHeight}%`,
@@ -2924,7 +3126,7 @@ export default function ProductionScheduleMaker() {
                 </div>
               ) : (
                 <>
-                  <span className="text-[8px] font-medium truncate text-center w-full">{displayLabel}</span>
+                  <span className="text-[8px] font-medium truncate text-center w-full">{showMergedLabel}</span>
                   {/* Link icon for merged (glued) stripe */}
                   <span className="absolute top-0.5 right-0.5 text-[10px] opacity-90" title="Glued">🔗</span>
                 </>
@@ -2977,11 +3179,11 @@ export default function ProductionScheduleMaker() {
                 <div
                   key={`${brushId}-${index}`}
                   data-brush-index={index}
-                  className={`flex items-center justify-center px-1 relative ${isGlueMode && !isEditMode && !isMergeMode ? 'pointer-events-auto cursor-grab' : isEditMode ? 'pointer-events-auto cursor-pointer' : isMergeMode ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'} ${isBeingDragged ? 'opacity-50' : ''} ${isSelectedForMerge ? 'ring-2 ring-green-400 ring-offset-1' : ''} ${isCopied ? 'ring-2 ring-purple-500 ring-offset-1 shadow-lg' : ''}`}
+                  className={`flex items-center justify-center px-1 relative ${isGlueMode && !isEditMode && !isMergeMode ? 'pointer-events-auto cursor-grab' : isEditMode ? 'pointer-events-auto cursor-pointer' : isMergeMode ? 'pointer-events-auto cursor-pointer' : isPaintMode ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'} ${isBeingDragged ? 'opacity-50' : ''} ${isSelectedForMerge ? 'ring-2 ring-green-400 ring-offset-1' : ''} ${isCopied ? 'ring-2 ring-purple-500 ring-offset-1 shadow-lg' : ''}`}
                   style={{
                     height: `${stripeHeight}%`,
                     width: '100%',
-                    backgroundColor: brush.color,
+                    backgroundColor: (day.customColors && day.customColors[index]) || brush.color,
                     color: '#fff',
                     position: 'absolute',
                     top: `${stripeTop}%`,
@@ -3155,6 +3357,7 @@ export default function ProductionScheduleMaker() {
                         setIsCopyPasteMode(false)
                         setCopyPasteCaptured(null)
                         setIsEraserMode(false)
+                        setIsPaintMode(false)
                         setShowBrushDropdown(false)
                       }}
                       className={`w-full text-left px-3 py-2 rounded-lg border-2 transition-all text-xs font-medium ${
@@ -3201,6 +3404,7 @@ export default function ProductionScheduleMaker() {
                 setIsEraserMode(false)
                 setIsMergeMode(false)
                 setIsUnmergeMode(false)
+                setIsPaintMode(false)
                 setPendingMergeDates([])
                 setPendingMergeSelections([])
                 setPendingMergeBrushId(null)
@@ -3321,6 +3525,7 @@ export default function ProductionScheduleMaker() {
                 setIsEditMode(false)
                 setIsUnmergeMode(false)
                 setIsGlueMode(false)
+                setIsPaintMode(false)
                 setEditingDate(null)
                 setEditingLabel('')
               }
@@ -3345,6 +3550,7 @@ export default function ProductionScheduleMaker() {
                 setIsEditMode(false)
                 setIsMergeMode(false)
                 setIsGlueMode(false)
+                setIsPaintMode(false)
                 setPendingMergeDates([])
                 setPendingMergeSelections([])
                 setPendingMergeBrushId(null)
@@ -3422,6 +3628,7 @@ export default function ProductionScheduleMaker() {
                 setIsUnmergeMode(false)
                 setIsEditMode(false)
                 setSelectedBrush(null)
+                setIsPaintMode(false)
               }
             }}
             className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border-2 transition-all text-base ${
@@ -3431,6 +3638,38 @@ export default function ProductionScheduleMaker() {
           >
             🧼
           </button>
+          <div className="flex-shrink-0 flex items-center gap-1">
+            <button
+              onClick={() => {
+                const on = !isPaintMode
+                setIsPaintMode(on)
+                if (on) {
+                  setIsCopyPasteMode(false)
+                  setCopyPasteCaptured(null)
+                  setIsEraserMode(false)
+                  setIsMergeMode(false)
+                  setIsUnmergeMode(false)
+                  setIsEditMode(false)
+                  setSelectedBrush(null)
+                }
+              }}
+              className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border-2 transition-all text-base ${
+                isPaintMode ? 'border-amber-500 bg-amber-50 shadow-sm' : 'border-slate-300 hover:border-slate-400 bg-white'
+              }`}
+              title="Select a color, then click blocks to change their color"
+            >
+              🖌️
+            </button>
+            {isPaintMode && (
+              <input
+                type="color"
+                value={paintColor}
+                onChange={(e) => setPaintColor(e.target.value)}
+                className="w-8 h-8 rounded-lg border-2 border-slate-300 cursor-pointer p-0"
+                title="Pick color"
+              />
+            )}
+          </div>
           <button
             onClick={handleClearAll}
             className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-red-300 hover:border-red-400 bg-white hover:bg-red-50 text-red-600 transition-all text-sm hover:shadow-sm"
@@ -3445,6 +3684,15 @@ export default function ProductionScheduleMaker() {
           >
             {isSaving ? 'Saving...' : hasUnsavedChanges ? '💾 Save' : '✓ Saved'}
           </button>
+          {false && (
+            <button
+              onClick={handleExportToExcel}
+              className="flex-shrink-0 px-3 py-1.5 rounded-lg bg-gradient-to-r from-emerald-600 to-teal-600 hover:from-emerald-700 hover:to-teal-700 text-white font-medium transition-all text-xs shadow-md"
+              title="Export calendar to Excel (CSV)"
+            >
+              📊 Export Excel
+            </button>
+          )}
         </div>
       </div>
 
@@ -3868,13 +4116,53 @@ export default function ProductionScheduleMaker() {
       {/* AI Assistant Modal */}
       {showAIModal && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full p-8">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full p-8 max-h-[90vh] overflow-y-auto">
             <h3 className="text-2xl font-bold mb-4">🤖 AI Assistant</h3>
             
             <div className="space-y-4">
+              {/* PDF upload for calendar import */}
               <div>
                 <label className="block text-sm font-medium mb-2">
-                  Enter your timeline help directions
+                  Upload a PDF calendar (optional)
+                </label>
+                <input
+                  ref={pdfInputRef}
+                  type="file"
+                  accept="application/pdf"
+                  onChange={handlePdfUpload}
+                  className="hidden"
+                />
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => pdfInputRef.current?.click()}
+                    disabled={isAILoading || isPdfLoading}
+                    className="px-4 py-2 rounded-lg border-2 border-dashed border-gray-400 dark:border-gray-500 hover:border-purple-500 dark:hover:border-purple-400 text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-all text-sm disabled:opacity-50"
+                  >
+                    {isPdfLoading ? 'Reading PDF...' : '📄 Choose PDF'}
+                  </button>
+                  {pdfFileName && (
+                    <span className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
+                      <span className="truncate max-w-[180px]" title={pdfFileName}>{pdfFileName}</span>
+                      <button
+                        type="button"
+                        onClick={clearPdf}
+                        disabled={isAILoading}
+                        className="text-red-500 hover:text-red-600 text-xs"
+                      >
+                        Remove
+                      </button>
+                    </span>
+                  )}
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                  Each page is sent to OpenAI so the AI can see your calendar and turn dates and activities into colored stripes.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium mb-2">
+                  Timeline directions (optional if you uploaded a PDF)
                 </label>
                 <textarea
                   value={aiInput}
@@ -3882,13 +4170,13 @@ export default function ProductionScheduleMaker() {
                     setAiInput(e.target.value)
                     setAiError(null)
                   }}
-                  placeholder="Example: Radio spot production, scripts lock on January 15, ship date is January 22. Need client meeting on January 10 and production blocks from January 15-20..."
-                  rows={8}
+                  placeholder="Example: Radio spot production, scripts lock on January 15, ship date is January 22. Or leave blank and use only the PDF above."
+                  rows={6}
                   disabled={isAILoading}
                   className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
                 />
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                  Describe your production timeline in natural language. The AI will create a draft schedule you can edit.
+                  Describe your timeline in words, or rely on the PDF. The AI will create a draft schedule you can edit.
                 </p>
               </div>
               
@@ -3911,6 +4199,8 @@ export default function ProductionScheduleMaker() {
                 onClick={() => {
                   setShowAIModal(false)
                   setAiInput('')
+                  setPdfPageImages([])
+                  setPdfFileName('')
                   setAiError(null)
                 }}
                 disabled={isAILoading}
@@ -3920,10 +4210,10 @@ export default function ProductionScheduleMaker() {
               </button>
               <button
                 onClick={handleAIGenerate}
-                disabled={isAILoading || !aiInput.trim()}
+                disabled={isAILoading || (!aiInput.trim() && pdfPageImages.length === 0)}
                 className="flex-1 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {isAILoading ? 'Generating...' : 'Confirm prompt'}
+                {isAILoading ? 'Generating...' : 'Import & generate schedule'}
               </button>
             </div>
           </div>
