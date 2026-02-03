@@ -17,7 +17,7 @@ export async function POST(request: NextRequest) {
     const { x, y, direction } = await request.json()
 
     // Update position and direction
-    await db.virtualOfficeCheckIn.update({
+    await db.virtualOfficeCheckin.update({
       where: { userId: session.userId },
       data: { 
         x, 

@@ -21,8 +21,8 @@ export async function POST(
       },
       include: {
         shots: true,
-        music: true,
-        drawingStyle: true,
+        music_descriptions: true,
+        drawing_styles: true,
       },
     })
 
@@ -37,20 +37,22 @@ export async function POST(
     })
 
     // Create or update output record
-    let output = await db.boardomaticOutput.findUnique({
+    let output = await db.boardomatic_outputs.findUnique({
       where: { projectId: params.id },
     })
 
     if (!output) {
-      output = await db.boardomaticOutput.create({
+      output = await db.boardomatic_outputs.create({
         data: {
+          id: `output_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           projectId: params.id,
           status: 'PROCESSING',
           videoUrl: null,
+          updatedAt: new Date(),
         },
       })
     } else {
-      output = await db.boardomaticOutput.update({
+      output = await db.boardomatic_outputs.update({
         where: { id: output.id },
         data: { status: 'PROCESSING' },
       })
@@ -95,7 +97,7 @@ export async function GET(
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
-    const output = await db.boardomaticOutput.findUnique({
+    const output = await db.boardomatic_outputs.findUnique({
       where: { projectId: params.id },
     })
 

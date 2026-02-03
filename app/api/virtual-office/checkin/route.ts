@@ -34,7 +34,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Create or update check-in
-    const checkIn = await db.virtualOfficeCheckIn.upsert({
+    const checkIn = await db.virtualOfficeCheckin.upsert({
       where: { userId: session.userId },
       create: {
         userId: session.userId,
@@ -85,7 +85,7 @@ export async function DELETE(request: NextRequest) {
     }
 
     // Set isCheckedIn to false instead of deleting
-    await db.virtualOfficeCheckIn.update({
+    await db.virtualOfficeCheckin.update({
       where: { userId: session.userId },
       data: { isCheckedIn: false },
     })

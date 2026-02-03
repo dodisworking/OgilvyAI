@@ -25,7 +25,7 @@ export async function GET(
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
-    const music = await db.musicDescription.findUnique({
+    const music = await db.music_descriptions.findUnique({
       where: { projectId: params.id },
     })
 
@@ -73,20 +73,22 @@ export async function PUT(
     }
 
     // Get or create music description
-    let music = await db.musicDescription.findUnique({
+    let music = await db.music_descriptions.findUnique({
       where: { projectId: params.id },
     })
 
     if (!music) {
-      music = await db.musicDescription.create({
+      music = await db.music_descriptions.create({
         data: {
+          id: `music_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           projectId: params.id,
           description,
           tempoMarkers: tempoMarkers ? JSON.parse(JSON.stringify(tempoMarkers)) : null,
+          updatedAt: new Date(),
         },
       })
     } else {
-      music = await db.musicDescription.update({
+      music = await db.music_descriptions.update({
         where: { id: music.id },
         data: {
           description,

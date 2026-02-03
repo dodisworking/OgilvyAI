@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get current user's check-in status
-    const checkIn = await db.virtualOfficeCheckIn.findUnique({
+    const checkIn = await db.virtualOfficeCheckin.findUnique({
       where: { userId: session.userId },
       include: {
         user: {

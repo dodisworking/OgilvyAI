@@ -15,7 +15,7 @@ export async function GET(request: NextRequest) {
     }
 
     // Get all checked-in users
-    const checkedIn = await db.virtualOfficeCheckIn.findMany({
+    const checkedIn = await db.virtualOfficeCheckin.findMany({
       where: { isCheckedIn: true },
       include: {
         user: {

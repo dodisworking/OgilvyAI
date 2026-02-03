@@ -25,11 +25,11 @@ export async function GET(
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
-    const shots = await db.shot.findMany({
+    const shots = await db.shots.findMany({
       where: { projectId: params.id },
       include: {
         characters: true,
-        motionReview: true,
+        motion_reviews: true,
       },
       orderBy: { shotNumber: 'asc' },
     })
@@ -77,17 +77,19 @@ export async function POST(
       )
     }
 
-    const shot = await db.shot.create({
+    const shot = await db.shots.create({
       data: {
+        id: `shot_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         projectId: params.id,
         shotNumber,
         sceneDescription,
         motionDescription: motionDescription || null,
         duration: duration || 5, // Default 5 seconds
+        updatedAt: new Date(),
       },
       include: {
         characters: true,
-        motionReview: true,
+        motion_reviews: true,
       },
     })
 
@@ -138,7 +140,7 @@ export async function PUT(
     const updatedShots = await Promise.all(
       shots.map(async (shotData: any) => {
         const { id, shotNumber, sceneDescription, motionDescription, duration } = shotData
-        return db.shot.update({
+        return db.shots.update({
           where: { id },
           data: {
             shotNumber,
@@ -148,7 +150,7 @@ export async function PUT(
           },
           include: {
             characters: true,
-            motionReview: true,
+            motion_reviews: true,
           },
         })
       })

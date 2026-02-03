@@ -19,13 +19,13 @@ export async function GET(request: NextRequest) {
           },
           orderBy: { shotNumber: 'asc' },
         },
-        music: true,
-        drawingStyle: {
+        music_descriptions: true,
+        drawing_styles: {
           include: {
-            references: true,
+            style_references: true,
           },
         },
-        output: true,
+        boardomatic_outputs: true,
       },
       orderBy: { updatedAt: 'desc' },
     })
@@ -71,9 +71,9 @@ export async function POST(request: NextRequest) {
       },
       include: {
         shots: true,
-        music: true,
-        drawingStyle: true,
-        output: true,
+        music_descriptions: true,
+        drawing_styles: true,
+        boardomatic_outputs: true,
       },
     })
 

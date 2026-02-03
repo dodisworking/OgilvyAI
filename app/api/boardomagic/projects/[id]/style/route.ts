@@ -25,10 +25,10 @@ export async function GET(
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
-    const drawingStyle = await db.drawingStyle.findUnique({
+    const drawingStyle = await db.drawing_styles.findUnique({
       where: { projectId: params.id },
       include: {
-        references: true,
+        style_references: true,
       },
     })
 
@@ -76,21 +76,24 @@ export async function POST(
     }
 
     // Get or create drawing style
-    let drawingStyle = await db.drawingStyle.findUnique({
+    let drawingStyle = await db.drawing_styles.findUnique({
       where: { projectId: params.id },
     })
 
     if (!drawingStyle) {
-      drawingStyle = await db.drawingStyle.create({
+      drawingStyle = await db.drawing_styles.create({
         data: {
+          id: `style_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           projectId: params.id,
+          updatedAt: new Date(),
         },
       })
     }
 
     // Create style reference
-    const reference = await db.styleReference.create({
+    const reference = await db.style_references.create({
       data: {
+        id: `ref_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         drawingStyleId: drawingStyle.id,
         imageUrl,
         description: description || null,
@@ -135,16 +138,18 @@ export async function PUT(
     const { selectedStyleId, description } = body
 
     // Get or create drawing style
-    let drawingStyle = await db.drawingStyle.findUnique({
+    let drawingStyle = await db.drawing_styles.findUnique({
       where: { projectId: params.id },
     })
 
     if (!drawingStyle) {
-      drawingStyle = await db.drawingStyle.create({
+      drawingStyle = await db.drawing_styles.create({
         data: {
+          id: `style_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
           projectId: params.id,
           selectedStyleId: selectedStyleId || null,
           description: description || null,
+          updatedAt: new Date(),
         },
       })
     } else {
@@ -154,7 +159,7 @@ export async function PUT(
         updateData.selectedStyleId = selectedStyleId
         
         // Unselect all other references
-        await db.styleReference.updateMany({
+        await db.style_references.updateMany({
           where: {
             drawingStyleId: drawingStyle.id,
             id: { not: selectedStyleId },
@@ -164,7 +169,7 @@ export async function PUT(
 
         // Select the chosen reference
         if (selectedStyleId) {
-          await db.styleReference.update({
+          await db.style_references.update({
             where: { id: selectedStyleId },
             data: { isSelected: true },
           })
@@ -172,16 +177,16 @@ export async function PUT(
       }
       if (description !== undefined) updateData.description = description
 
-      drawingStyle = await db.drawingStyle.update({
+      drawingStyle = await db.drawing_styles.update({
         where: { id: drawingStyle.id },
         data: updateData,
       })
     }
 
-    const updatedStyle = await db.drawingStyle.findUnique({
+    const updatedStyle = await db.drawing_styles.findUnique({
       where: { id: drawingStyle.id },
       include: {
-        references: true,
+        style_references: true,
       },
     })
 

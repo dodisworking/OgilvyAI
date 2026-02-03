@@ -22,17 +22,17 @@ export async function GET(
         shots: {
           include: {
             characters: true,
-            motionReview: true,
+            motion_reviews: true,
           },
           orderBy: { shotNumber: 'asc' },
         },
-        music: true,
-        drawingStyle: {
+        music_descriptions: true,
+        drawing_styles: {
           include: {
-            references: true,
+            style_references: true,
           },
         },
-        output: true,
+        boardomatic_outputs: true,
       },
     })
 
@@ -92,13 +92,13 @@ export async function PUT(
           },
           orderBy: { shotNumber: 'asc' },
         },
-        music: true,
-        drawingStyle: {
+        music_descriptions: true,
+        drawing_styles: {
           include: {
-            references: true,
+            style_references: true,
           },
         },
-        output: true,
+        boardomatic_outputs: true,
       },
     })
 

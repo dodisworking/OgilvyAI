@@ -22,7 +22,7 @@ export async function GET(
       include: {
         shots: {
           include: {
-            motionReview: true,
+            motion_reviews: true,
           },
           orderBy: { shotNumber: 'asc' },
         },
@@ -38,7 +38,7 @@ export async function GET(
       shotId: shot.id,
       shotNumber: shot.shotNumber,
       motionDescription: shot.motionDescription,
-      motionReview: shot.motionReview,
+      motion_reviews: shot.motion_reviews,
     }))
 
     return NextResponse.json({ motions })
@@ -88,7 +88,7 @@ export async function PUT(
     const updatedShots = await Promise.all(
       motions.map(async (motionData: any) => {
         const { shotId, motionDescription } = motionData
-        return db.shot.update({
+        return db.shots.update({
           where: { id: shotId },
           data: { motionDescription },
         })

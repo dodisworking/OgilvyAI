@@ -56,13 +56,14 @@ export async function POST(request: NextRequest) {
       submitterEmailVal = (submitterEmail ?? '').trim() || null
     }
 
-    const suggestion = await db.suggestion.create({
+    const suggestion = await db.suggestions.create({
       data: {
+        id: `sug_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
         type: type as (typeof VALID_TYPES)[number],
         content: trimmed,
-        userId: userId ?? undefined,
-        submitterName: submitterNameVal ?? undefined,
-        submitterEmail: submitterEmailVal ?? undefined,
+        userId: userId || null,
+        submitterName: submitterNameVal || null,
+        submitterEmail: submitterEmailVal || null,
       },
     })
 
@@ -89,7 +90,7 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
     }
 
-    const suggestions = await db.suggestion.findMany({
+    const suggestions = await db.suggestions.findMany({
       orderBy: { createdAt: 'desc' },
       take: 500,
       select: {
@@ -99,7 +100,7 @@ export async function GET(request: NextRequest) {
         submitterName: true,
         submitterEmail: true,
         createdAt: true,
-        user: { select: { name: true, email: true } },
+        users: { select: { name: true, email: true } },
       },
     })
 

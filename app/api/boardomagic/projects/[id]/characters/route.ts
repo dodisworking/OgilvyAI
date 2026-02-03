@@ -81,7 +81,7 @@ export async function POST(
 
     // Delete existing characters for the shots being updated
     const shotIds = [...new Set(characters.map((c: any) => c.shotId))]
-    await db.character.deleteMany({
+    await db.characters.deleteMany({
       where: {
         shotId: { in: shotIds },
       },
@@ -91,12 +91,15 @@ export async function POST(
     const createdCharacters = await Promise.all(
       characters.map(async (charData: any) => {
         const { shotId, characterNumber, ethnicity, description } = charData
-        return db.character.create({
+        const id = `char_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`
+        return db.characters.create({
           data: {
+            id,
             shotId,
             characterNumber,
             ethnicity: ethnicity || null,
             description: description || null,
+            updatedAt: new Date(),
           },
         })
       })

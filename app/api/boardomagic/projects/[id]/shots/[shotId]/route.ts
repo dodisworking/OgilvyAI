@@ -25,14 +25,14 @@ export async function GET(
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
-    const shot = await db.shot.findFirst({
+    const shot = await db.shots.findFirst({
       where: {
         id: params.shotId,
         projectId: params.id,
       },
       include: {
         characters: true,
-        motionReview: true,
+        motion_reviews: true,
       },
     })
 
@@ -82,12 +82,12 @@ export async function PUT(
     if (motionDescription !== undefined) updateData.motionDescription = motionDescription
     if (duration !== undefined) updateData.duration = duration
 
-    const shot = await db.shot.update({
+    const shot = await db.shots.update({
       where: { id: params.shotId },
       data: updateData,
       include: {
         characters: true,
-        motionReview: true,
+        motion_reviews: true,
       },
     })
 
@@ -124,7 +124,7 @@ export async function DELETE(
       return NextResponse.json({ error: 'Project not found' }, { status: 404 })
     }
 
-    await db.shot.delete({
+    await db.shots.delete({
       where: { id: params.shotId },
     })
 
