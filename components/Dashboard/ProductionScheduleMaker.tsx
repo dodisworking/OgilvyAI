@@ -41,6 +41,11 @@ export default function ProductionScheduleMaker() {
   const [isGlueMode, setIsGlueMode] = useState(false)
   const [sabbathMode, setSabbathMode] = useState(false) // When true, skips weekends (keeps Saturday/Sunday free)
   const [showAIModal, setShowAIModal] = useState(false)
+  const [pendingAIResult, setPendingAIResult] = useState<
+    | { kind: 'recognize'; summary: string; sentToOpenAI: { prompt: string; imageCount: number } }
+    | { kind: 'schedule'; schedule: unknown[]; rawResponse: string; sentToOpenAI: { prompt: string; imageCount: number } }
+    | null
+  >(null)
   const [showBrushCreator, setShowBrushCreator] = useState(false)
   const [newBrushName, setNewBrushName] = useState('')
   const [newBrushColor, setNewBrushColor] = useState('#3b82f6')
@@ -1484,6 +1489,7 @@ export default function ProductionScheduleMaker() {
               
               const glueId = connectedDay?.brushGlueIds?.[connectedDate.brushIndex]
               const customLabel = connectedDay?.customLabels?.[connectedDate.brushIndex]
+              const customColor = connectedDay?.customColors?.[connectedDate.brushIndex]
               
               // ALWAYS add to moves if it's a different date OR if it has a glue ID (merged block)
               // This ensures Sunday and all other dates in merged blocks are always processed
@@ -1498,6 +1504,7 @@ export default function ProductionScheduleMaker() {
                     brushId: brushIdToUse,
                     glueId,
                     customLabel,
+                    customColor,
                     newDateStr,
                   })
                 }
@@ -1509,6 +1516,7 @@ export default function ProductionScheduleMaker() {
                   brushId: brushIdToUse,
                   glueId,
                   customLabel,
+                  customColor,
                   newDateStr,
                 })
               }
@@ -1542,12 +1550,14 @@ export default function ProductionScheduleMaker() {
               const updatedBrushes: string[] = []
               const updatedBrushGlueIds: Record<number, string> = {}
               const updatedCustomLabels: Record<number, string> = {}
+              const updatedCustomColors: Record<number, string> = {}
               sourceDay.brushes.forEach((id, idx) => {
                 if (idx !== move.originalBrushIndex) {
                   const newIdx = updatedBrushes.length
                   updatedBrushes.push(id)
                   if (sourceDay.brushGlueIds?.[idx] !== undefined) updatedBrushGlueIds[newIdx] = sourceDay.brushGlueIds![idx]
                   if (sourceDay.customLabels?.[idx] !== undefined) updatedCustomLabels[newIdx] = sourceDay.customLabels![idx]
+                  if (sourceDay.customColors?.[idx] !== undefined) updatedCustomColors[newIdx] = sourceDay.customColors![idx]
                 }
               })
               
@@ -1558,6 +1568,7 @@ export default function ProductionScheduleMaker() {
                 brushes: updatedBrushes,
                 brushGlueIds: Object.keys(updatedBrushGlueIds).length > 0 ? updatedBrushGlueIds : undefined,
                 customLabels: Object.keys(updatedCustomLabels).length > 0 ? updatedCustomLabels : undefined,
+                customColors: Object.keys(updatedCustomColors).length > 0 ? updatedCustomColors : undefined,
               }
             })
             
@@ -1577,6 +1588,7 @@ export default function ProductionScheduleMaker() {
               const targetBrushes = [...targetDay.brushes]
               const targetBrushGlueIds = { ...targetDay.brushGlueIds || {} }
               const targetCustomLabels = { ...targetDay.customLabels || {} }
+              const targetCustomColors = { ...targetDay.customColors || {} }
               
               // Add all brushes for this target date, maintaining the order they were in originally
               // Sort moves by original date to maintain chronological order
@@ -1643,6 +1655,11 @@ export default function ProductionScheduleMaker() {
                   if (move.customLabel) {
                     targetCustomLabels[newIndex] = move.customLabel
                   }
+                  
+                  // Preserve the custom color
+                  if (move.customColor) {
+                    targetCustomColors[newIndex] = move.customColor
+                  }
                 } else if (move.glueId) {
                   // This should not happen, but log it for debugging
                   console.error(`CRITICAL: Missing brush ID for date ${move.newDateStr} with glue ID ${move.glueId}. Original: ${move.originalDateStr}, Index: ${move.originalBrushIndex}`)
@@ -1654,6 +1671,7 @@ export default function ProductionScheduleMaker() {
                 brushes: targetBrushes,
                 brushGlueIds: Object.keys(targetBrushGlueIds).length > 0 ? targetBrushGlueIds : undefined,
                 customLabels: Object.keys(targetCustomLabels).length > 0 ? targetCustomLabels : undefined,
+                customColors: Object.keys(targetCustomColors).length > 0 ? targetCustomColors : undefined,
               }
             })
             
@@ -1669,12 +1687,14 @@ export default function ProductionScheduleMaker() {
             const updatedBrushes: string[] = []
             const updatedBrushGlueIds: Record<number, string> = {}
             const updatedCustomLabels: Record<number, string> = {}
+            const updatedCustomColors: Record<number, string> = {}
             sourceDay.brushes.forEach((id, idx) => {
               if (!indicesToRemove.has(idx)) {
                 const newIdx = updatedBrushes.length
                 updatedBrushes.push(id)
                 if (sourceDay.brushGlueIds?.[idx] !== undefined) updatedBrushGlueIds[newIdx] = sourceDay.brushGlueIds[idx]
                 if (sourceDay.customLabels?.[idx] !== undefined) updatedCustomLabels[newIdx] = sourceDay.customLabels[idx]
+                if (sourceDay.customColors?.[idx] !== undefined) updatedCustomColors[newIdx] = sourceDay.customColors[idx]
               }
             })
             updatedSchedule[sourceDateStr] = {
@@ -1682,17 +1702,20 @@ export default function ProductionScheduleMaker() {
               brushes: updatedBrushes,
               brushGlueIds: Object.keys(updatedBrushGlueIds).length > 0 ? updatedBrushGlueIds : undefined,
               customLabels: Object.keys(updatedCustomLabels).length > 0 ? updatedCustomLabels : undefined,
+              customColors: Object.keys(updatedCustomColors).length > 0 ? updatedCustomColors : undefined,
             }
           }
           
           // Add all brushes to target date
           const targetDay = prev[targetDateStr] || { date: targetDateStr, brushes: [] }
           
-          // Preserve glue IDs and custom labels for all moved brushes
+          // Preserve glue IDs, custom labels, and custom colors for all moved brushes
           const targetBrushGlueIds = { ...targetDay.brushGlueIds || {} }
           const targetCustomLabels = { ...targetDay.customLabels || {} }
+          const targetCustomColors = { ...targetDay.customColors || {} }
           const sourceBrushGlueIds = dragState.current.sourceBrushGlueIds || {}
           const sourceCustomLabels = sourceDay?.customLabels || {}
+          const sourceCustomColors = sourceDay?.customColors || {}
           
           // Separate merged and non-merged brushes to insert them in the correct positions
           const mergedBrushes: Array<{ brush: string; originalIndex: number; glueId: string }> = []
@@ -1721,6 +1744,7 @@ export default function ProductionScheduleMaker() {
           const targetBrushes: string[] = []
           const newTargetBrushGlueIds: Record<number, string> = {}
           const newTargetCustomLabels: Record<number, string> = {}
+          const newTargetCustomColors: Record<number, string> = {}
           
           // First, add merged brushes at index 0
           mergedBrushes.forEach((item, i) => {
@@ -1733,9 +1757,16 @@ export default function ProductionScheduleMaker() {
                 newTargetCustomLabels[i] = customLabel
               }
             }
+            // Preserve custom color if it existed
+            if (sourceCustomColors && item.originalIndex in sourceCustomColors) {
+              const customColor = sourceCustomColors[item.originalIndex]
+              if (customColor && customColor.trim() !== '') {
+                newTargetCustomColors[i] = customColor
+              }
+            }
           })
           
-          // Then, add existing brushes (shift their glue IDs and labels)
+          // Then, add existing brushes (shift their glue IDs, labels, and colors)
           const mergedCount = mergedBrushes.length
           targetDay.brushes.forEach((brush, idx) => {
             const newIdx = mergedCount + idx
@@ -1747,6 +1778,10 @@ export default function ProductionScheduleMaker() {
             // Shift existing custom labels
             if (targetCustomLabels[idx]) {
               newTargetCustomLabels[newIdx] = targetCustomLabels[idx]
+            }
+            // Shift existing custom colors
+            if (targetCustomColors[idx]) {
+              newTargetCustomColors[newIdx] = targetCustomColors[idx]
             }
           })
           
@@ -1766,11 +1801,19 @@ export default function ProductionScheduleMaker() {
                 newTargetCustomLabels[newIdx] = customLabel
               }
             }
+            // Preserve custom color if it existed
+            if (sourceCustomColors && item.originalIndex in sourceCustomColors) {
+              const customColor = sourceCustomColors[item.originalIndex]
+              if (customColor && customColor.trim() !== '') {
+                newTargetCustomColors[newIdx] = customColor
+              }
+            }
           })
           
-          // Update targetBrushGlueIds and targetCustomLabels with the new structure
+          // Update targetBrushGlueIds, targetCustomLabels, and targetCustomColors with the new structure
           Object.assign(targetBrushGlueIds, newTargetBrushGlueIds)
           Object.assign(targetCustomLabels, newTargetCustomLabels)
+          Object.assign(targetCustomColors, newTargetCustomColors)
           
           // Always set brushGlueIds - use the updated targetBrushGlueIds which includes preserved glue IDs
           // Even if targetBrushGlueIds is empty, we should preserve targetDay's existing brushGlueIds
@@ -1783,6 +1826,7 @@ export default function ProductionScheduleMaker() {
             brushes: targetBrushes,
             brushGlueIds: finalBrushGlueIds,
             customLabels: Object.keys(targetCustomLabels).length > 0 ? targetCustomLabels : undefined,
+            customColors: Object.keys(targetCustomColors).length > 0 ? targetCustomColors : undefined,
           }
           
           return updatedSchedule
@@ -2612,7 +2656,148 @@ export default function ProductionScheduleMaker() {
     setHasUnsavedChanges(false)
   }
 
-  // Handle AI schedule generation - send PDF/images to OpenAI once and apply schedule
+  // Apply a parsed AI schedule to the timeline (called after user confirms preview or directly for text-only)
+  const applyAIScheduleToTimeline = useCallback((scheduleData: unknown[]) => {
+    if (!Array.isArray(scheduleData)) return
+    saveToHistory()
+    // Normalize: infer mergeWithPrevious when same activity appears on consecutive days (AI sometimes omits it)
+    const sorted = [...scheduleData]
+      .filter((item: { date?: string }) => item && typeof item === 'object' && item.date && /^\d{4}-\d{2}-\d{2}$/.test(item.date))
+      .sort((a: { date: string }, b: { date: string }) => a.date.localeCompare(b.date))
+    
+    // Track which activities appeared on the previous day (for merge detection)
+    const prevDayActivities = new Set<string>()
+    const normalized = sorted.map((item: { date: string; stripes?: Array<{ activity: string; label?: string; mergeWithPrevious?: boolean }> }, idx: number) => {
+      const currentDayActivities = new Set<string>()
+      const stripes = Array.isArray(item.stripes) ? item.stripes.map((stripe) => {
+        const activity = stripe.activity
+        currentDayActivities.add(activity)
+        
+        // Check if this activity was on the previous day (match by activity name, not index)
+        const wasOnPrevDay = prevDayActivities.has(activity)
+        
+        // If AI said mergeWithPrevious, trust it. Otherwise, infer from consecutive same activity.
+        const shouldMerge = stripe.mergeWithPrevious === true || (wasOnPrevDay && stripe.mergeWithPrevious !== false)
+        
+        return { ...stripe, mergeWithPrevious: shouldMerge }
+      }) : []
+      
+      // Update prevDayActivities for next iteration
+      prevDayActivities.clear()
+      currentDayActivities.forEach(a => prevDayActivities.add(a))
+      
+      return { date: item.date, stripes }
+    })
+    const scheduleDataToUse = normalized
+
+    const sortedForKeys = [...scheduleDataToUse].sort((a: { date: string }, b: { date: string }) => a.date.localeCompare(b.date))
+    const colorKeySet = new Set<string>()
+    const lastLabelByActivityForKeys: Record<string, string> = {}
+    sortedForKeys.forEach((item: { date: string; stripes?: Array<{ activity: string; label?: string; mergeWithPrevious?: boolean }> }) => {
+      if (!item.stripes) return
+      item.stripes.forEach((stripe: { activity: string; label?: string; mergeWithPrevious?: boolean }) => {
+        const key = (stripe.label && stripe.label.trim())
+          ? stripe.label.trim()
+          : (stripe.mergeWithPrevious ? (lastLabelByActivityForKeys[stripe.activity] ?? stripe.activity) : stripe.activity)
+        if (stripe.label && stripe.label.trim()) lastLabelByActivityForKeys[stripe.activity] = stripe.label.trim()
+        colorKeySet.add(key)
+      })
+    })
+    const colorKeys = Array.from(colorKeySet)
+    const labelToBrushId: Record<string, string> = {}
+    colorKeys.forEach((key, i) => {
+      const brush = brushes[i % brushes.length]
+      if (brush) labelToBrushId[key] = brush.id
+    })
+    const newSchedule: Record<string, ScheduleDay> = {}
+    const sortedSchedule = [...scheduleDataToUse].sort((a: { date: string }, b: { date: string }) => a.date.localeCompare(b.date))
+    const lastLabelByActivity: Record<string, string> = {}
+    sortedSchedule.forEach((item: { date: string; stripes?: Array<{ activity: string; label?: string; mergeWithPrevious?: boolean }> }) => {
+      const dateStr = item.date
+      const day: ScheduleDay = { date: dateStr, brushes: [], customLabels: {} }
+      if (!item.stripes) {
+        if (day.brushes.length > 0) newSchedule[dateStr] = day
+        return
+      }
+      item.stripes.forEach((stripe, stripeIndex) => {
+        const effectiveLabel = (stripe.label && stripe.label.trim())
+          ? stripe.label.trim()
+          : (stripe.mergeWithPrevious ? (lastLabelByActivity[stripe.activity] ?? stripe.activity) : stripe.activity)
+        if (stripe.label && stripe.label.trim()) lastLabelByActivity[stripe.activity] = stripe.label.trim()
+        const colorKey = effectiveLabel
+        const brushId = labelToBrushId[colorKey]
+        if (!brushId) {
+          const fallback = brushes.find(b => b.name === stripe.activity)
+          if (fallback) {
+            day.brushes.push(fallback.id)
+            day.customLabels = day.customLabels || {}
+            day.customLabels[stripeIndex] = effectiveLabel
+          }
+          return
+        }
+        day.brushes.push(brushId)
+        day.customLabels = day.customLabels || {}
+        day.customLabels[stripeIndex] = effectiveLabel
+      })
+      if (day.brushes.length > 0) newSchedule[dateStr] = day
+    })
+    // Create glue groups for merged blocks - use ACTIVITY name as the key for consistency
+    const newGlueGroups: Record<string, GlueGroup> = {}
+    const newMergeGlueGroups = new Set<string>()
+    type ActivityState = { lastDateStr: string; lastBrushIndex: number; activeGlueId: string | null }
+    const perActivity: Record<string, ActivityState> = {} // Use activity name as key
+    
+    sortedSchedule.forEach((item: { date: string; stripes?: Array<{ activity: string; label?: string; mergeWithPrevious?: boolean }> }) => {
+      const dateStr = item.date
+      const day = newSchedule[dateStr]
+      if (!day) return
+      if (!item.stripes) return
+      
+      item.stripes.forEach((stripe, stripeIndex) => {
+        // Use activity name as the key for matching merged blocks
+        const activityKey = stripe.activity
+        const state = perActivity[activityKey]
+        
+        if (stripe.mergeWithPrevious && state) {
+          const { lastDateStr, lastBrushIndex, activeGlueId } = state
+          const prevDay = newSchedule[lastDateStr]
+          if (prevDay) {
+            if (activeGlueId) {
+              // Continue existing glue group
+              newGlueGroups[activeGlueId].dates.push(dateStr)
+              day.brushGlueIds = { ...day.brushGlueIds, [stripeIndex]: activeGlueId }
+              // Update state with current position
+              perActivity[activityKey] = { lastDateStr: dateStr, lastBrushIndex: stripeIndex, activeGlueId }
+            } else {
+              // Start new glue group
+              const glueId = `ai-merge-${Date.now()}-${activityKey.replace(/\s+/g, '-')}-${Math.random().toString(36).slice(2, 9)}`
+              newGlueGroups[glueId] = { id: glueId, dates: [lastDateStr, dateStr] }
+              if (!prevDay.brushGlueIds) prevDay.brushGlueIds = {}
+              prevDay.brushGlueIds[lastBrushIndex] = glueId
+              day.brushGlueIds = { ...day.brushGlueIds, [stripeIndex]: glueId }
+              newMergeGlueGroups.add(glueId)
+              perActivity[activityKey] = { lastDateStr: dateStr, lastBrushIndex: stripeIndex, activeGlueId: glueId }
+            }
+            return
+          }
+        }
+        
+        // Not a merge continuation - reset glue ID but track position
+        if (!stripe.mergeWithPrevious) {
+          perActivity[activityKey] = { lastDateStr: dateStr, lastBrushIndex: stripeIndex, activeGlueId: null }
+        } else {
+          // mergeWithPrevious is true but no state - still track for future
+          perActivity[activityKey] = { lastDateStr: dateStr, lastBrushIndex: stripeIndex, activeGlueId: state?.activeGlueId || null }
+        }
+      })
+    })
+    setSchedule(newSchedule)
+    setGlueGroups(newGlueGroups)
+    setMergeGlueGroups(newMergeGlueGroups)
+    setHasUnsavedChanges(true)
+  }, [brushes, saveToHistory])
+
+  // Handle AI schedule generation: with PDF → step "recognize" (text summary); text-only → single call (JSON)
   const handleAIGenerate = useCallback(async () => {
     const hasPdfImages = pdfPageImages.length > 0
     const hasInput = aiInput.trim().length > 0
@@ -2627,10 +2812,12 @@ export default function ProductionScheduleMaker() {
     const fullPrompt = hasInput
       ? aiInput.trim()
       : (hasPdfImages
-          ? 'I uploaded images of a calendar/schedule. Look at each image and extract every date and activity. Return the schedule in the required JSON format.'
+          ? 'Look at the calendar image(s) and describe every day in the requested format.'
           : '')
 
     try {
+      // With PDF: first step is "recognize" → AI returns day-by-day text summary
+      const step = hasPdfImages ? 'recognize' : undefined
       const response = await fetch('/api/ai-schedule', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -2640,154 +2827,42 @@ export default function ProductionScheduleMaker() {
           currentMonth: currentMonth.toISOString(),
           brushes: brushes,
           ...(hasPdfImages && { images: pdfPageImages }),
+          ...(step && { step }),
         }),
       })
 
       if (!response.ok) {
-        const errorData = await response.json()
-        throw new Error(errorData.error || 'Failed to generate schedule')
+        let errorMessage = `Failed to generate schedule (${response.status})`
+        try {
+          const errorData = await response.json()
+          if (errorData?.error) errorMessage = errorData.error
+        } catch {
+          const text = await response.text()
+          if (text?.startsWith('<!')) errorMessage = 'Server returned an error. Check that OPENAI_API_KEY is set in .env and restart the dev server.'
+          else if (text) errorMessage = text.slice(0, 200)
+        }
+        throw new Error(errorMessage)
       }
 
-      const data = await response.json()
-      
+      const data = await response.json().catch(() => null)
+      if (!data) throw new Error('Invalid response from server (not JSON).')
+
+      if (step === 'recognize') {
+        const summary = typeof data.summary === 'string' ? data.summary : ''
+        const sentToOpenAI = data.sentToOpenAI && typeof data.sentToOpenAI.prompt === 'string'
+          ? { prompt: data.sentToOpenAI.prompt, imageCount: Number(data.sentToOpenAI.imageCount) || pdfPageImages.length }
+          : { prompt: fullPrompt, imageCount: pdfPageImages.length }
+        setPendingAIResult({ kind: 'recognize', summary, sentToOpenAI })
+        setAiInput(summary) // Put it in the text box so you can edit and send it
+        return
+      }
+
       if (!data.schedule || !Array.isArray(data.schedule)) {
         throw new Error('Invalid response format from AI')
       }
-
-      // Build schedule from AI response - treat every block as independent (no glue/merge)
-      // So the user can glue and move blocks around without duplication
-      saveToHistory()
-
-      // Sort by date first so we can propagate labels for merged runs when building colorKeySet
-      const sortedForKeys = [...(data.schedule || [])].filter(
-        (item: { date: string }) => item.date && /^\d{4}-\d{2}-\d{2}$/.test(item.date)
-      ).sort((a: { date: string }, b: { date: string }) => a.date.localeCompare(b.date))
-
-      const colorKeySet = new Set<string>()
-      const lastLabelByActivityForKeys: Record<string, string> = {}
-      sortedForKeys.forEach((item: { date: string; stripes: Array<{ activity: string; label?: string; mergeWithPrevious?: boolean }> }) => {
-        if (!item.stripes) return
-        item.stripes.forEach((stripe: { activity: string; label?: string; mergeWithPrevious?: boolean }) => {
-          const key = (stripe.label && stripe.label.trim())
-            ? stripe.label.trim()
-            : (stripe.mergeWithPrevious ? (lastLabelByActivityForKeys[stripe.activity] ?? stripe.activity) : stripe.activity)
-          if (stripe.label && stripe.label.trim()) lastLabelByActivityForKeys[stripe.activity] = stripe.label.trim()
-          colorKeySet.add(key)
-        })
-      })
-      const colorKeys = Array.from(colorKeySet)
-      // Assign each distinct label/activity a unique brush (round-robin so no two labels share a color)
-      const labelToBrushId: Record<string, string> = {}
-      colorKeys.forEach((key, i) => {
-        const brush = brushes[i % brushes.length]
-        if (brush) labelToBrushId[key] = brush.id
-      })
-
-      const newSchedule: Record<string, ScheduleDay> = {}
-
-      // Sort by date so we process in chronological order (needed for mergeWithPrevious)
-      const sortedSchedule = [...data.schedule].filter(
-        (item: { date: string }) => item.date && /^\d{4}-\d{2}-\d{2}$/.test(item.date)
-      ).sort((a: { date: string }, b: { date: string }) => a.date.localeCompare(b.date))
-
-      // Track the last label seen per activity so merged continuation days get the same label (and colorKey)
-      const lastLabelByActivity: Record<string, string> = {}
-
-      sortedSchedule.forEach((item: { date: string; stripes: Array<{ activity: string; label?: string; mergeWithPrevious?: boolean }> }) => {
-        const dateStr = item.date
-        const day: ScheduleDay = {
-          date: dateStr,
-          brushes: [],
-          customLabels: {},
-        }
-
-        item.stripes.forEach((stripe, stripeIndex) => {
-          // For mergeWithPrevious stripes without a label, use the same label as the first day of the run so title and color match
-          const effectiveLabel = (stripe.label && stripe.label.trim())
-            ? stripe.label.trim()
-            : (stripe.mergeWithPrevious ? (lastLabelByActivity[stripe.activity] ?? stripe.activity) : stripe.activity)
-          if (stripe.label && stripe.label.trim()) {
-            lastLabelByActivity[stripe.activity] = stripe.label.trim()
-          } else if (stripe.mergeWithPrevious && lastLabelByActivity[stripe.activity]) {
-            // Keep same run label; already set above
-          }
-
-          const colorKey = effectiveLabel
-          const brushId = labelToBrushId[colorKey]
-          if (!brushId) {
-            const fallback = brushes.find(b => b.name === stripe.activity)
-            if (fallback) {
-              day.brushes.push(fallback.id)
-              day.customLabels = day.customLabels || {}
-              day.customLabels[stripeIndex] = effectiveLabel
-            } else {
-              console.warn(`Brush not found for activity: ${stripe.activity}`)
-            }
-            return
-          }
-
-          day.brushes.push(brushId)
-          day.customLabels = day.customLabels || {}
-          day.customLabels[stripeIndex] = effectiveLabel
-        })
-
-        if (day.brushes.length > 0) {
-          newSchedule[dateStr] = day
-        }
-      })
-
-      // Second pass: apply mergeWithPrevious → glue groups + mergeGlueGroups so bars render as one merged block (use same label as first pass so run is grouped correctly)
-      const newGlueGroups: Record<string, GlueGroup> = {}
-      const newMergeGlueGroups = new Set<string>()
-      type ColorKeyState = { lastDateStr: string; lastBrushIndex: number; activeGlueId: string | null }
-      const perColorKey: Record<string, ColorKeyState> = {}
-
-      sortedSchedule.forEach((item: { date: string; stripes: Array<{ activity: string; label?: string; mergeWithPrevious?: boolean }> }) => {
-        const dateStr = item.date
-        const day = newSchedule[dateStr]
-        if (!day) return
-
-        item.stripes.forEach((stripe, stripeIndex) => {
-          const colorKey = (day.customLabels && day.customLabels[stripeIndex]) ? day.customLabels[stripeIndex] : ((stripe.label && stripe.label.trim()) ? stripe.label.trim() : stripe.activity)
-          const state = perColorKey[colorKey]
-
-          if (stripe.mergeWithPrevious && state) {
-            const { lastDateStr, lastBrushIndex, activeGlueId } = state
-            const prevDay = newSchedule[lastDateStr]
-            if (prevDay) {
-              if (activeGlueId) {
-                newGlueGroups[activeGlueId].dates.push(dateStr)
-                day.brushGlueIds = { ...day.brushGlueIds, [stripeIndex]: activeGlueId }
-              } else {
-                const glueId = `ai-merge-${Date.now()}-${colorKey.replace(/\s+/g, '-')}-${Math.random().toString(36).slice(2, 9)}`
-                newGlueGroups[glueId] = { id: glueId, dates: [lastDateStr, dateStr] }
-                if (!prevDay.brushGlueIds) prevDay.brushGlueIds = {}
-                prevDay.brushGlueIds[lastBrushIndex] = glueId
-                day.brushGlueIds = { ...day.brushGlueIds, [stripeIndex]: glueId }
-                newMergeGlueGroups.add(glueId)
-                perColorKey[colorKey] = { lastDateStr: dateStr, lastBrushIndex: stripeIndex, activeGlueId: glueId }
-                return
-              }
-            }
-          }
-
-          if (!stripe.mergeWithPrevious && state) {
-            perColorKey[colorKey] = { ...state, activeGlueId: null }
-          }
-          perColorKey[colorKey] = {
-            lastDateStr: dateStr,
-            lastBrushIndex: stripeIndex,
-            activeGlueId: (stripe.mergeWithPrevious && state?.activeGlueId) ? state.activeGlueId : null,
-          }
-        })
-      })
-
-      setSchedule(newSchedule)
-      setGlueGroups(newGlueGroups)
-      setMergeGlueGroups(newMergeGlueGroups)
-      setHasUnsavedChanges(true)
       
-      // Close modal and clear input and recognition
+      // Text-only (no PDF): apply schedule directly without preview
+      applyAIScheduleToTimeline(data.schedule)
       setShowAIModal(false)
       setAiInput('')
       setPdfPageImages([])
@@ -2799,7 +2874,39 @@ export default function ProductionScheduleMaker() {
     } finally {
       setIsAILoading(false)
     }
-  }, [aiInput, pdfPageImages, currentMonth, brushes, saveToHistory, format])
+  }, [aiInput, pdfPageImages, currentMonth, brushes, applyAIScheduleToTimeline])
+
+  // After user confirms the recognized text summary, feed it to the AI to get JSON and apply to timeline
+  const handleConfirmAndPopulate = useCallback(async () => {
+    if (!pendingAIResult || pendingAIResult.kind !== 'recognize' || !pendingAIResult.summary.trim()) return
+    setIsAILoading(true)
+    setAiError(null)
+    try {
+      const response = await fetch('/api/ai-schedule', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ step: 'populate', summary: pendingAIResult.summary }),
+      })
+      if (!response.ok) {
+        const err = await response.json().catch(() => ({}))
+        throw new Error((err as { error?: string })?.error || `Failed (${response.status})`)
+      }
+      const data = await response.json()
+      if (!data.schedule || !Array.isArray(data.schedule)) throw new Error('Invalid schedule from AI')
+      applyAIScheduleToTimeline(data.schedule)
+      setPendingAIResult(null)
+      setShowAIModal(false)
+      setAiInput('')
+      setPdfPageImages([])
+      setPdfFileName('')
+      setAiError(null)
+    } catch (e: any) {
+      setAiError(e.message || 'Failed to populate schedule.')
+    } finally {
+      setIsAILoading(false)
+    }
+  }, [pendingAIResult, aiInput, applyAIScheduleToTimeline])
 
   // Render PDF to images in browser and send to OpenAI Vision
   const handlePdfUpload = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -3069,7 +3176,7 @@ export default function ProductionScheduleMaker() {
             <div
               key={`merged-${brushId}-${index}`}
               data-brush-index={index}
-              className={`flex items-center justify-center px-1 relative ${isGlueMode && !isEditMode && !isMergeMode ? 'pointer-events-auto cursor-grab' : isEditMode ? 'pointer-events-auto cursor-pointer' : isMergeMode ? 'pointer-events-auto cursor-pointer' : isPaintMode ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'} ${isSelectedForMerge ? 'ring-2 ring-green-400 ring-offset-1' : ''} ${isCopied ? 'ring-2 ring-purple-500 ring-offset-1 shadow-lg' : ''}`}
+              className={`flex items-center justify-center px-1 relative ${isGlueMode && !isEditMode && !isMergeMode ? 'pointer-events-auto cursor-grab' : isEditMode ? 'pointer-events-auto cursor-pointer' : isMergeMode ? 'pointer-events-auto cursor-pointer' : isPaintMode ? 'pointer-events-auto cursor-pointer' : isCopyPasteMode ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'} ${isSelectedForMerge ? 'ring-2 ring-green-400 ring-offset-1' : ''} ${isCopied ? 'ring-2 ring-purple-500 ring-offset-1 shadow-lg' : ''}`}
               style={{
                 height: `${mergedStripeHeight}%`,
                 width: '100%',
@@ -3179,7 +3286,7 @@ export default function ProductionScheduleMaker() {
                 <div
                   key={`${brushId}-${index}`}
                   data-brush-index={index}
-                  className={`flex items-center justify-center px-1 relative ${isGlueMode && !isEditMode && !isMergeMode ? 'pointer-events-auto cursor-grab' : isEditMode ? 'pointer-events-auto cursor-pointer' : isMergeMode ? 'pointer-events-auto cursor-pointer' : isPaintMode ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'} ${isBeingDragged ? 'opacity-50' : ''} ${isSelectedForMerge ? 'ring-2 ring-green-400 ring-offset-1' : ''} ${isCopied ? 'ring-2 ring-purple-500 ring-offset-1 shadow-lg' : ''}`}
+                  className={`flex items-center justify-center px-1 relative ${isGlueMode && !isEditMode && !isMergeMode ? 'pointer-events-auto cursor-grab' : isEditMode ? 'pointer-events-auto cursor-pointer' : isMergeMode ? 'pointer-events-auto cursor-pointer' : isPaintMode ? 'pointer-events-auto cursor-pointer' : isCopyPasteMode ? 'pointer-events-auto cursor-pointer' : 'pointer-events-none'} ${isBeingDragged ? 'opacity-50' : ''} ${isSelectedForMerge ? 'ring-2 ring-green-400 ring-offset-1' : ''} ${isCopied ? 'ring-2 ring-purple-500 ring-offset-1 shadow-lg' : ''}`}
                   style={{
                     height: `${stripeHeight}%`,
                     width: '100%',
@@ -4118,104 +4225,191 @@ export default function ProductionScheduleMaker() {
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-2xl w-full p-8 max-h-[90vh] overflow-y-auto">
             <h3 className="text-2xl font-bold mb-4">🤖 AI Assistant</h3>
-            
-            <div className="space-y-4">
-              {/* PDF upload for calendar import */}
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Upload a PDF calendar (optional)
-                </label>
-                <input
-                  ref={pdfInputRef}
-                  type="file"
-                  accept="application/pdf"
-                  onChange={handlePdfUpload}
-                  className="hidden"
-                />
-                <div className="flex items-center gap-2 flex-wrap">
-                  <button
-                    type="button"
-                    onClick={() => pdfInputRef.current?.click()}
-                    disabled={isAILoading || isPdfLoading}
-                    className="px-4 py-2 rounded-lg border-2 border-dashed border-gray-400 dark:border-gray-500 hover:border-purple-500 dark:hover:border-purple-400 text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-all text-sm disabled:opacity-50"
-                  >
-                    {isPdfLoading ? 'Reading PDF...' : '📄 Choose PDF'}
-                  </button>
-                  {pdfFileName && (
-                    <span className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
-                      <span className="truncate max-w-[180px]" title={pdfFileName}>{pdfFileName}</span>
-                      <button
-                        type="button"
-                        onClick={clearPdf}
-                        disabled={isAILoading}
-                        className="text-red-500 hover:text-red-600 text-xs"
-                      >
-                        Remove
-                      </button>
-                    </span>
+
+            {pendingAIResult ? (
+              <>
+                <p className="text-sm text-gray-600 dark:text-gray-400 mb-2">
+                  {pendingAIResult.kind === 'recognize'
+                    ? 'OpenAI returned a list of blocks and which days they cover. "day X to day Y" = merged block. You can edit it below, then click "Confirm & populate timeline".'
+                    : 'Review what we sent to OpenAI and what came back. If it looks correct, click "Apply to timeline".'}
+                </p>
+                <div className="rounded-lg border border-gray-300 dark:border-gray-600 bg-blue-50 dark:bg-blue-900/20 p-3 mb-3">
+                  <label className="block text-xs font-medium text-gray-600 dark:text-gray-300 mb-1">What we sent to OpenAI</label>
+                  <p className="text-sm text-gray-800 dark:text-gray-200 whitespace-pre-wrap mb-1">{pendingAIResult.sentToOpenAI.prompt || '(no text prompt)'}</p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400">
+                    {pendingAIResult.sentToOpenAI.imageCount > 0
+                      ? `${pendingAIResult.sentToOpenAI.imageCount} PDF page(s) sent as images`
+                      : 'No images sent'}
+                  </p>
+                </div>
+                <div className="rounded-lg border border-gray-300 dark:border-gray-600 bg-gray-50 dark:bg-gray-900 p-3 mb-4">
+                  <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                    What OpenAI returned{pendingAIResult.kind === 'recognize' ? ' (simple writing – edit in box below)' : ' (schedule data)'}
+                  </label>
+                  <pre className="text-xs overflow-auto max-h-[20vh] whitespace-pre-wrap break-words font-mono text-gray-800 dark:text-gray-200 mt-2 mb-3">
+                    {pendingAIResult.kind === 'recognize' ? pendingAIResult.summary : pendingAIResult.rawResponse}
+                  </pre>
+                  {pendingAIResult.kind === 'recognize' && (
+                    <>
+                      <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">Text to send (edit here, then Confirm & populate)</label>
+                      <textarea
+                        value={aiInput}
+                        onChange={(e) => setAiInput(e.target.value)}
+                        rows={8}
+                        className="w-full px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                        placeholder="Edit the text above, then click Confirm & populate timeline"
+                      />
+                    </>
                   )}
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                  Each page is sent to OpenAI so the AI can see your calendar and turn dates and activities into colored stripes.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium mb-2">
-                  Timeline directions (optional if you uploaded a PDF)
-                </label>
-                <textarea
-                  value={aiInput}
-                  onChange={(e) => {
-                    setAiInput(e.target.value)
-                    setAiError(null)
-                  }}
-                  placeholder="Example: Radio spot production, scripts lock on January 15, ship date is January 22. Or leave blank and use only the PDF above."
-                  rows={6}
-                  disabled={isAILoading}
-                  className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-                />
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                  Describe your timeline in words, or rely on the PDF. The AI will create a draft schedule you can edit.
-                </p>
-              </div>
-              
-              {aiError && (
-                <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
-                  <p className="text-sm text-red-600 dark:text-red-400">{aiError}</p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={() => setPendingAIResult(null)}
+                    className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700"
+                  >
+                    Cancel
+                  </button>
+                  {pendingAIResult.kind === 'recognize' ? (
+                    <button
+                      onClick={handleConfirmAndPopulate}
+                      disabled={isAILoading || !aiInput.trim()}
+                      className="flex-1 px-4 py-2 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-medium disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      {isAILoading ? 'Populating...' : 'Confirm & populate timeline'}
+                    </button>
+                  ) : (
+                    <button
+                      onClick={() => {
+                        applyAIScheduleToTimeline(pendingAIResult.schedule)
+                        setPendingAIResult(null)
+                        setShowAIModal(false)
+                        setAiInput('')
+                        setPdfPageImages([])
+                        setPdfFileName('')
+                        setAiError(null)
+                      }}
+                      className="flex-1 px-4 py-2 rounded-lg bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-medium"
+                    >
+                      Apply to timeline
+                    </button>
+                  )}
                 </div>
-              )}
-              
-              {isAILoading && (
-                <div className="flex items-center justify-center gap-2 py-4">
-                  <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
-                  <span className="text-sm text-gray-600 dark:text-gray-400">Building your schedule...</span>
-                </div>
-              )}
-            </div>
+              </>
+            ) : (
+              <>
+                <div className="space-y-4">
+                  {/* PDF upload for calendar import */}
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      Upload a PDF calendar (optional)
+                    </label>
+                    <input
+                      ref={pdfInputRef}
+                      type="file"
+                      accept="application/pdf"
+                      onChange={handlePdfUpload}
+                      className="hidden"
+                    />
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <button
+                        type="button"
+                        onClick={() => pdfInputRef.current?.click()}
+                        disabled={isAILoading || isPdfLoading}
+                        className="px-4 py-2 rounded-lg border-2 border-dashed border-gray-400 dark:border-gray-500 hover:border-purple-500 dark:hover:border-purple-400 text-gray-600 dark:text-gray-400 hover:text-purple-600 dark:hover:text-purple-400 transition-all text-sm disabled:opacity-50"
+                      >
+                        {isPdfLoading ? 'Reading PDF...' : '📄 Choose PDF'}
+                      </button>
+                      {pdfFileName && (
+                        <span className="text-sm text-gray-600 dark:text-gray-300 flex items-center gap-2">
+                          <span className="truncate max-w-[180px]" title={pdfFileName}>{pdfFileName}</span>
+                          <button
+                            type="button"
+                            onClick={clearPdf}
+                            disabled={isAILoading}
+                            className="text-red-500 hover:text-red-600 text-xs"
+                          >
+                            Remove
+                          </button>
+                        </span>
+                      )}
+                    </div>
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                      Each page is sent to OpenAI so the AI can see your calendar and turn dates and activities into colored stripes.
+                    </p>
+                  </div>
 
-            <div className="flex gap-3 mt-6">
-              <button
-                onClick={() => {
-                  setShowAIModal(false)
-                  setAiInput('')
-                  setPdfPageImages([])
-                  setPdfFileName('')
-                  setAiError(null)
-                }}
-                disabled={isAILoading}
-                className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                Close
-              </button>
-              <button
-                onClick={handleAIGenerate}
-                disabled={isAILoading || (!aiInput.trim() && pdfPageImages.length === 0)}
-                className="flex-1 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {isAILoading ? 'Generating...' : 'Import & generate schedule'}
-              </button>
-            </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-2">
+                      {pdfPageImages.length > 0 ? 'Additional notes (optional)' : 'Describe your schedule'}
+                    </label>
+                    <textarea
+                      value={aiInput}
+                      onChange={(e) => {
+                        setAiInput(e.target.value)
+                        setAiError(null)
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && !e.shiftKey && !isAILoading) {
+                          if (aiInput.trim() || pdfPageImages.length > 0) {
+                            e.preventDefault()
+                            handleAIGenerate()
+                          }
+                        }
+                      }}
+                      placeholder={pdfPageImages.length > 0 
+                        ? "Optional: Add notes about the PDF calendar..."
+                        : "Describe your schedule, for example:\n\nDESIGN from Monday Feb 2 to Friday Feb 6\nAWARD on Monday Feb 2\nMOTION TESTS Wed Feb 4 to Fri Feb 6\n\nPress Enter to generate..."}
+                      rows={8}
+                      disabled={isAILoading}
+                      autoFocus={pdfPageImages.length === 0}
+                      className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                    />
+                    <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                      {pdfPageImages.length > 0 
+                        ? 'The AI will read your PDF and list each day. You can review and edit before applying.'
+                        : 'Press Enter to generate - Shift+Enter for new line'}
+                    </p>
+                  </div>
+
+                  {aiError && (
+                    <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-3">
+                      <p className="text-sm text-red-600 dark:text-red-400">{aiError}</p>
+                    </div>
+                  )}
+
+                  {isAILoading && (
+                    <div className="flex items-center justify-center gap-2 py-4">
+                      <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-purple-600"></div>
+                      <span className="text-sm text-gray-600 dark:text-gray-400">Building your schedule...</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex gap-3 mt-6">
+                  <button
+                    onClick={() => {
+                      setShowAIModal(false)
+                      setPendingAIResult(null)
+                      setAiInput('')
+                      setPdfPageImages([])
+                      setPdfFileName('')
+                      setAiError(null)
+                    }}
+                    disabled={isAILoading}
+                    className="flex-1 px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    Close
+                  </button>
+                  <button
+                    onClick={handleAIGenerate}
+                    disabled={isAILoading || (!aiInput.trim() && pdfPageImages.length === 0)}
+                    className="flex-1 px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-medium transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  >
+                    {isAILoading ? 'Generating...' : 'Import & generate schedule'}
+                  </button>
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}

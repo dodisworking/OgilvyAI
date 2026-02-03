@@ -1,6 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,33 +8,40 @@ datasource db {
 }
 
 model User {
-  id           String    @id @default(cuid())
-  email        String    @unique
-  passwordHash String
-  password     String?   // Store plain text password for Isaac Mode
-  name         String
-  createdAt    DateTime  @default(now())
-  updatedAt    DateTime  @updatedAt
-  requests     Request[]
-  drowningRequests DrowningRequest[]
+  id                    String                @id @default(cuid())
+  email                 String                @unique
+  passwordHash          String
+  name                  String
+  createdAt             DateTime              @default(now())
+  updatedAt             DateTime              @updatedAt
+  password              String?
+  profilePicture        String?
+  avatarData            Json?
+  accountType           AccountType           @default(OTHER)
+  boardomatic_projects  BoardomaticProject[]
+  drowningRequests      DrowningRequest[]
+  production_schedules  ProductionSchedule[]
+  requests              Request[]
+  suggestions           suggestions[]
+  virtualOfficeCheckins VirtualOfficeCheckin?
 
   @@map("users")
 }
 
 model Request {
-  id          String        @id @default(cuid())
-  userId      String
-  user        User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  startDate   DateTime
-  endDate     DateTime
-  requestType RequestType
-  title       String?
-  reason      String?
-  status      RequestStatus @default(PENDING)
-  adminNotes  String?
-  dayBreakdown Json?        // Store which days are TIME_OFF vs WFH (format: {"2024-01-15": "TIME_OFF", "2024-01-16": "WFH"})
-  createdAt   DateTime      @default(now())
-  updatedAt   DateTime      @updatedAt
+  id           String        @id @default(cuid())
+  userId       String
+  startDate    DateTime
+  endDate      DateTime
+  requestType  RequestType
+  reason       String?
+  status       RequestStatus @default(PENDING)
+  adminNotes   String?
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  title        String?
+  dayBreakdown Json?
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("requests")
 }
@@ -46,10 +50,10 @@ model Admin {
   id           String   @id @default(cuid())
   email        String   @unique
   passwordHash String
-  password     String?  // Store plain text password for Isaac Mode
   name         String   @default("Tim")
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
+  password     String?
 
   @@map("admins")
 }
@@ -69,18 +73,157 @@ model Session {
 }
 
 model DrowningRequest {
-  id          String    @id @default(cuid())
-  userId      String
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  startDate   DateTime
-  endDate     DateTime
-  natureOfNeed String?  // What kind of help they need
-  dayBreakdown Json?    // Store which days need help (format: {"2024-01-15": true})
-  notifiedUsers Json?   // Array of user IDs who were notified about this request
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  id            String   @id @default(cuid())
+  userId        String
+  startDate     DateTime
+  endDate       DateTime
+  natureOfNeed  String?
+  dayBreakdown  Json?
+  notifiedUsers Json?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("drowning_requests")
+}
+
+model VirtualOfficeCheckin {
+  id          String   @id @default(cuid())
+  userId      String   @unique
+  teamsLink   String
+  isCheckedIn Boolean  @default(true)
+  checkInTime DateTime @default(now())
+  x           Float?
+  y           Float?
+  updatedAt   DateTime @updatedAt
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("virtual_office_checkins")
+}
+
+model BoardomaticProject {
+  id                  String               @id @default(cuid())
+  userId              String
+  title               String
+  script              String
+  totalDuration       Int
+  status              BoardomaticStatus    @default(DRAFT)
+  createdAt           DateTime             @default(now())
+  updatedAt           DateTime             @updatedAt
+  boardomatic_outputs boardomatic_outputs?
+  users               User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  drawing_styles      drawing_styles?
+  music_descriptions  music_descriptions?
+  shots               shots[]
+
+  @@map("boardomatic_projects")
+}
+
+model ProductionSchedule {
+  id         String   @id @default(cuid())
+  userId     String
+  brushes    Json
+  schedule   Json
+  glueGroups Json
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+  title      String
+  users      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("production_schedules")
+}
+
+model boardomatic_outputs {
+  id                   String             @id
+  projectId            String             @unique
+  videoUrl             String?
+  thumbnailUrl         String?
+  status               OutputStatus       @default(PENDING)
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime
+  boardomatic_projects BoardomaticProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model characters {
+  id              String   @id
+  shotId          String
+  characterNumber Int
+  ethnicity       String?
+  description     String?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime
+  shots           shots    @relation(fields: [shotId], references: [id], onDelete: Cascade)
+}
+
+model drawing_styles {
+  id                   String             @id
+  projectId            String             @unique
+  selectedStyleId      String?
+  description          String?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime
+  boardomatic_projects BoardomaticProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  style_references     style_references[]
+}
+
+model motion_reviews {
+  id             String   @id
+  shotId         String   @unique
+  reviewedMotion String
+  notes          String?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime
+  shots          shots    @relation(fields: [shotId], references: [id], onDelete: Cascade)
+}
+
+model music_descriptions {
+  id                   String             @id
+  projectId            String             @unique
+  description          String
+  tempoMarkers         Json?
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime
+  boardomatic_projects BoardomaticProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model shots {
+  id                   String             @id
+  projectId            String
+  shotNumber           Int
+  sceneDescription     String
+  motionDescription    String?
+  duration             Int
+  createdAt            DateTime           @default(now())
+  updatedAt            DateTime
+  characters           characters[]
+  motion_reviews       motion_reviews?
+  boardomatic_projects BoardomaticProject @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model style_references {
+  id             String         @id
+  drawingStyleId String
+  imageUrl       String
+  description    String?
+  isSelected     Boolean        @default(false)
+  createdAt      DateTime       @default(now())
+  drawing_styles drawing_styles @relation(fields: [drawingStyleId], references: [id], onDelete: Cascade)
+}
+
+model suggestions {
+  id             String         @id
+  type           SuggestionType
+  content        String
+  userId         String?
+  submitterName  String?
+  submitterEmail String?
+  createdAt      DateTime       @default(now())
+  users          User?          @relation(fields: [userId], references: [id])
+
+  @@index([createdAt])
+  @@index([type])
+  @@index([userId])
 }
 
 enum RequestType {
@@ -98,4 +241,37 @@ enum RequestStatus {
 enum UserType {
   USER
   ADMIN
+}
+
+enum AccountType {
+  PRODUCER
+  CREATIVE
+  CLIENT
+  OTHER
+}
+
+enum BoardomaticStatus {
+  DRAFT
+  SCRIPT_ADDED
+  SHOTS_CONFIGURED
+  CHARACTERS_ADDED
+  STYLE_SELECTED
+  MUSIC_ADDED
+  MOTION_REVIEWED
+  READY_TO_GENERATE
+  GENERATING
+  COMPLETED
+}
+
+enum OutputStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+enum SuggestionType {
+  SUGGESTION
+  BUG
+  IDEA
 }
