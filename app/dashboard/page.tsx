@@ -225,9 +225,9 @@ export default function Dashboard() {
           </div>
         </div>
 
-        {/* Menu Bubbles - uniform app size */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12 grid-auto-rows-[minmax(180px,1fr)]">
-          <div className="relative group h-full min-h-[180px]">
+        {/* Menu Bubbles - uniform app size (all same height) */}
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12 grid-auto-rows-[minmax(200px,200px)]">
+          <div className="relative group h-full min-h-[200px] flex w-full">
             <MenuBubble
               title="Time Off / Work From Home"
               description="Request time off or work from home days"
@@ -261,7 +261,7 @@ export default function Dashboard() {
           </div>
 
           {/* I'm Drowning Bubble */}
-          <div className="relative group h-full min-h-[180px]">
+          <div className="relative group h-full min-h-[200px] flex w-full">
             <MenuBubble
               title="🆘 I'm Drowning"
               description="Request help when you're overwhelmed"
@@ -295,7 +295,7 @@ export default function Dashboard() {
           </div>
 
           {/* WFH Virtual Office Bubble */}
-          <div className="relative group h-full min-h-[180px]">
+          <div className="relative group h-full min-h-[200px] flex w-full">
             <MenuBubble
               title="🏢 WFH Virtual Office"
               description="Join the virtual office and connect with your team"
@@ -308,11 +308,12 @@ export default function Dashboard() {
                 setShowDrowningRequests(false)
               }}
               gradient="bg-gradient-to-r from-indigo-500 to-purple-500"
+              inDevelopment
             />
           </div>
 
           {/* AI Production Scheduler Maker Bubble */}
-          <div className="relative group h-full min-h-[180px]">
+          <div className="relative group h-full min-h-[200px] flex w-full">
             <MenuBubble
               title="🤖 AI Production Scheduler Maker"
               description="Create and manage production schedules with AI"
@@ -342,7 +343,7 @@ export default function Dashboard() {
           </div>
 
           {/* Talent Tracker Bubble */}
-          <div className="relative group h-full min-h-[180px]">
+          <div className="relative group h-full min-h-[200px] flex w-full">
             <MenuBubble
               title="✨ Talent Tracker"
               description="Track and manage talent"
@@ -354,7 +355,7 @@ export default function Dashboard() {
           </div>
 
           {/* Boardomagic Bubble */}
-          <div className="relative group h-full min-h-[180px]">
+          <div className="relative group h-full min-h-[200px] flex w-full">
             <MenuBubble
               title="🎬 Boardomagic"
               description="Create storyboards and boardomatics"
@@ -374,7 +375,7 @@ export default function Dashboard() {
           </div>
 
           {/* Face Match (AI Talent Recognition) Bubble */}
-          <div className="relative group h-full min-h-[180px]">
+          <div className="relative group h-full min-h-[200px] flex w-full">
             <MenuBubble
               title="👤 Face Match"
               description="AI talent recognition — match faces to talent reports"
@@ -386,7 +387,7 @@ export default function Dashboard() {
           </div>
 
           {/* Folder Flow (AI Folder Organizer) Bubble */}
-          <div className="relative group h-full min-h-[180px]">
+          <div className="relative group h-full min-h-[200px] flex w-full">
             <MenuBubble
               title="📁 Folder Flow"
               description="AI folder organizer assistant"
@@ -398,7 +399,7 @@ export default function Dashboard() {
           </div>
 
           {/* Walk In the Ballpark Bubble */}
-          <div className="relative group h-full min-h-[180px]">
+          <div className="relative group h-full min-h-[200px] flex w-full">
             <MenuBubble
               title="⚾ Walk In the Ballpark"
               description="AI assistant for fast estimates"
@@ -410,7 +411,7 @@ export default function Dashboard() {
           </div>
 
           {/* Link Sorter Bubble */}
-          <div className="relative group h-full min-h-[180px]">
+          <div className="relative group h-full min-h-[200px] flex w-full">
             <MenuBubble
               title="🔗 Link Sorter"
               description="Production links sorted with AI — call on them quickly"
@@ -422,7 +423,7 @@ export default function Dashboard() {
           </div>
 
           {/* I Play Chess You Play Check Off (Shot Tracker) Bubble */}
-          <div className="relative group h-full min-h-[180px]">
+          <div className="relative group h-full min-h-[200px] flex w-full">
             <MenuBubble
               title="✅ I Play Chess, You Play Check Off"
               description="Live shot list tracker — everyone sees progress during production"
@@ -434,7 +435,7 @@ export default function Dashboard() {
           </div>
 
           {/* Suggestion Box Bubble - at bottom */}
-          <div className="relative group h-full min-h-[180px]">
+          <div className="relative group h-full min-h-[200px] flex w-full">
             <MenuBubble
               title="📥 Suggestion Box"
               description="Suggestions, bug reports, and feature ideas"
