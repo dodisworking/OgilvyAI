@@ -228,7 +228,7 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
                   📧 Send SOS Email to Whole Department
                 </p>
                 <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                  Notify everyone about your rescue mission! They'll get a fun email asking if they're up for the task.
+                  Notify everyone about your rescue mission! They&apos;ll get a fun email asking if they&apos;re up for the task.
                 </p>
               </div>
             </label>

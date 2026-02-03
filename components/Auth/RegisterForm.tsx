@@ -152,7 +152,7 @@ export default function RegisterForm() {
       {/* Role Selection */}
       <div>
         <label className="block text-sm font-medium mb-2">
-          What's your role? <span className="text-red-500">*</span>
+          What&apos;s your role? <span className="text-red-500">*</span>
         </label>
         <div className="grid grid-cols-3 gap-2">
           <button
