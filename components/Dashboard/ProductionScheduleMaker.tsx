@@ -1390,6 +1390,7 @@ export default function ProductionScheduleMaker() {
               brushId: string
               glueId: string | undefined
               customLabel: string | undefined
+              customColor: string | undefined
               newDateStr: string
             }> = []
             
