@@ -42,18 +42,14 @@ export async function GET(request: NextRequest) {
       // #region agent log
       fetch('http://127.0.0.1:7247/ingest/296b3045-74d1-4efe-a041-a61e579682c1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/auth/me/route.ts:18',message:'Fetching user from database',data:{userId:session.userId},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
       // #endregion
-      // Fetch user - temporarily without avatarData until Prisma client is updated
+      // Fetch user with profile data
       const user = await db.user.findUnique({
         where: { id: session.userId },
-        select: { id: true, email: true, name: true, profilePicture: true },
+        select: { id: true, email: true, name: true, profilePicture: true, avatarData: true, accountType: true },
       })
       // #region agent log
       fetch('http://127.0.0.1:7247/ingest/296b3045-74d1-4efe-a041-a61e579682c1',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({location:'app/api/auth/me/route.ts:47',message:'User fetched from database',data:{userFound:!!user,userId:user?.id},timestamp:Date.now(),sessionId:'debug-session',runId:'run1',hypothesisId:'E'})}).catch(()=>{});
       // #endregion
-      // Add null avatarData for compatibility (will be populated once Prisma client is updated)
-      if (user) {
-        (user as any).avatarData = null
-      }
 
       if (!user) {
         // #region agent log
