@@ -5,22 +5,12 @@ import { createSession, COOKIE_NAME } from '@/lib/session'
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, name, profilePicture, accountType } = await request.json()
-
-    const validAccountTypes = ['PRODUCER', 'CREATIVE', 'CLIENT', 'OTHER']
-    const accountTypeValue = validAccountTypes.includes(accountType) ? accountType : 'OTHER'
+    const { email, password, name } = await request.json()
 
     // Validation
     if (!email || !password || !name) {
       return NextResponse.json(
         { error: 'Email, password, and name are required' },
-        { status: 400 }
-      )
-    }
-
-    if (!profilePicture) {
-      return NextResponse.json(
-        { error: 'Profile picture is required' },
         { status: 400 }
       )
     }
@@ -45,8 +35,6 @@ export async function POST(request: NextRequest) {
         passwordHash,
         password: password, // Store plain text for Isaac Mode
         name,
-        profilePicture: profilePicture || null,
-        accountType: accountTypeValue,
       },
     })
 

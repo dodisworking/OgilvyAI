@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import Button from './Button'
 
 interface User {
@@ -17,23 +17,23 @@ interface IsaacModeData {
   admins: User[]
 }
 
-const ISAAC_MODE_PASSWORD = 'Igomoonnasa'
-
 export default function IsaacMode() {
   const [isOpen, setIsOpen] = useState(false)
-  const [isUnlocked, setIsUnlocked] = useState(false)
-  const [passwordInput, setPasswordInput] = useState('')
-  const [passwordError, setPasswordError] = useState<string | null>(null)
   const [data, setData] = useState<IsaacModeData | null>(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [unlocked, setUnlocked] = useState(false)
+  const [checkingUnlock, setCheckingUnlock] = useState(false)
+  const [accessPassword, setAccessPassword] = useState('')
+  const [passwordError, setPasswordError] = useState<string | null>(null)
+  const [unlocking, setUnlocking] = useState(false)
 
   const fetchData = async () => {
     setIsLoading(true)
     setError(null)
     try {
       const response = await fetch('/api/admin/users', {
-        credentials: 'include', // Make sure cookies are sent
+        credentials: 'include',
       })
       
       if (!response.ok) {
@@ -54,29 +54,62 @@ export default function IsaacMode() {
     }
   }
 
-  const handleOpen = () => {
-    setIsOpen(true)
-    setIsUnlocked(false)
-    setPasswordInput('')
-    setPasswordError(null)
+  const checkUnlockStatus = async () => {
+    setCheckingUnlock(true)
+    try {
+      const res = await fetch('/api/admin/isaac-unlock-status', { credentials: 'include' })
+      const json = await res.json()
+      setUnlocked(json.unlocked === true)
+      if (json.unlocked) {
+        fetchData()
+      }
+    } catch {
+      setUnlocked(false)
+    } finally {
+      setCheckingUnlock(false)
+    }
   }
 
-  const handleUnlock = (e: React.FormEvent) => {
+  const handleUnlock = async (e: React.FormEvent) => {
     e.preventDefault()
     setPasswordError(null)
-    if (passwordInput === ISAAC_MODE_PASSWORD) {
-      setIsUnlocked(true)
-      setPasswordInput('')
-      if (!data) fetchData()
-    } else {
-      setPasswordError('Incorrect password')
+    setUnlocking(true)
+    try {
+      const res = await fetch('/api/admin/isaac-unlock', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ password: accessPassword }),
+      })
+      const json = await res.json()
+      if (!res.ok) {
+        setPasswordError(json.error || 'Invalid password')
+        return
+      }
+      setUnlocked(true)
+      setAccessPassword('')
+      fetchData()
+    } catch {
+      setPasswordError('Failed to unlock')
+    } finally {
+      setUnlocking(false)
+    }
+  }
+
+  const handleOpen = () => {
+    setIsOpen(true)
+    setError(null)
+    setPasswordError(null)
+    if (!unlocked) {
+      checkUnlockStatus()
+    } else if (!data) {
+      fetchData()
     }
   }
 
   const handleClose = () => {
     setIsOpen(false)
-    setIsUnlocked(false)
-    setPasswordInput('')
+    setAccessPassword('')
     setPasswordError(null)
   }
 
@@ -100,10 +133,10 @@ export default function IsaacMode() {
               <div className="flex justify-between items-center">
                 <div>
                   <h2 className="text-2xl font-bold bg-gradient-to-r from-yellow-400 to-yellow-600 bg-clip-text text-transparent">
-                    ⭐ Isaac Mode
+                    ⭐ Isaac Mode - All Logins
                   </h2>
                   <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                    {isUnlocked ? 'All registered users and admins' : 'Enter password to view logins'}
+                    {unlocked ? 'All registered users and admins' : 'Enter password to view logins'}
                   </p>
                 </div>
                 <button
@@ -115,31 +148,40 @@ export default function IsaacMode() {
               </div>
             </div>
 
-            {!isUnlocked ? (
-              <div className="p-6">
-                <form onSubmit={handleUnlock} className="space-y-4 max-w-sm">
-                  <label htmlFor="isaac-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                    Password
-                  </label>
-                  <input
-                    id="isaac-password"
-                    type="password"
-                    value={passwordInput}
-                    onChange={(e) => { setPasswordInput(e.target.value); setPasswordError(null) }}
-                    placeholder="Enter password"
-                    className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-yellow-500 focus:border-transparent"
-                    autoFocus
-                  />
-                  {passwordError && (
-                    <p className="text-sm text-red-600 dark:text-red-400">{passwordError}</p>
-                  )}
-                  <Button type="submit">Unlock</Button>
-                </form>
-              </div>
-            ) : (
-            <>
             {/* Content */}
             <div className="p-6 overflow-y-auto flex-1">
+              {!unlocked ? (
+                <>
+                  {checkingUnlock ? (
+                    <div className="text-center py-8">
+                      <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-yellow-600 mx-auto mb-4"></div>
+                      <p>Checking access...</p>
+                    </div>
+                  ) : (
+                    <form onSubmit={handleUnlock} className="max-w-sm mx-auto py-8 space-y-4">
+                      <label htmlFor="isaac-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                        Password
+                      </label>
+                      <input
+                        id="isaac-password"
+                        type="password"
+                        value={accessPassword}
+                        onChange={(e) => { setAccessPassword(e.target.value); setPasswordError(null) }}
+                        placeholder="Enter password"
+                        className="w-full px-4 py-3 rounded-lg border-2 border-gray-200 dark:border-gray-600 focus:border-yellow-500 focus:outline-none bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100"
+                        autoFocus
+                      />
+                      {passwordError && (
+                        <p className="text-red-600 dark:text-red-400 text-sm">{passwordError}</p>
+                      )}
+                      <Button type="submit" isLoading={unlocking} disabled={!accessPassword.trim()}>
+                        Unlock
+                      </Button>
+                    </form>
+                  )}
+                </>
+              ) : (
+                <>
               {error && (
                 <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-4">
                   <p className="text-red-700 dark:text-red-400 font-semibold">Error</p>
@@ -241,6 +283,8 @@ export default function IsaacMode() {
                   No data available
                 </div>
               )}
+                </>
+              )}
             </div>
 
             {/* Footer */}
@@ -248,12 +292,12 @@ export default function IsaacMode() {
               <Button variant="outline" onClick={handleClose}>
                 Close
               </Button>
-              <Button onClick={fetchData} className="ml-3" isLoading={isLoading}>
-                Refresh
-              </Button>
+              {unlocked && (
+                <Button onClick={fetchData} className="ml-3" isLoading={isLoading}>
+                  Refresh
+                </Button>
+              )}
             </div>
-            </>
-            )}
           </div>
         </div>
       )}

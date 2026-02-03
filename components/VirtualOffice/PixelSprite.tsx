@@ -102,6 +102,8 @@ export default function PixelSprite({
         height: spriteHeight * size,
         position: 'relative',
         imageRendering: 'pixelated',
+        imageRendering: '-moz-crisp-edges',
+        imageRendering: 'crisp-edges',
       }}
     >
       {spriteData.map((row, rowIndex) =>

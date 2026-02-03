@@ -252,7 +252,7 @@ export default function DrowningAdmin() {
             </h2>
             <p className="text-sm text-gray-600 dark:text-gray-400 mb-6 flex items-center gap-1">
               <span>💬</span> Choose which users should receive a notification about{' '}
-              <strong>{selectedRequest.user.name}&apos;s</strong> request for help. <span>🌊</span>
+              <strong>{selectedRequest.user.name}'s</strong> request for help. <span>🌊</span>
             </p>
 
             <div className="mb-4 flex items-center justify-between">

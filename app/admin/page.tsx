@@ -4,7 +4,6 @@ import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import AdminDashboard from '@/components/Admin/AdminDashboard'
 import DrowningAdmin from '@/components/Admin/DrowningAdmin'
-import MasterCalendar from '@/components/Admin/MasterCalendar'
 import Button from '@/components/UI/Button'
 import { Request } from '@/types'
 
@@ -12,8 +11,6 @@ export default function AdminPage() {
   const [admin, setAdmin] = useState<any>(null)
   const [requests, setRequests] = useState<Request[]>([])
   const [isLoading, setIsLoading] = useState(true)
-  const [showTimeOffRequests, setShowTimeOffRequests] = useState(false)
-  const [showMasterCalendar, setShowMasterCalendar] = useState(false)
   const router = useRouter()
 
   useEffect(() => {
@@ -106,56 +103,14 @@ export default function AdminPage() {
           </Button>
         </div>
 
-        {/* Action Buttons */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-8">
-          <button
-            onClick={() => {
-              setShowTimeOffRequests(!showTimeOffRequests)
-              setShowMasterCalendar(false)
-            }}
-            className={`px-6 py-4 rounded-xl font-semibold text-lg transition-all duration-300 ${
-              showTimeOffRequests
-                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
-                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:shadow-md border-2 border-purple-200 dark:border-purple-800'
-            }`}
-          >
-            {showTimeOffRequests ? 'Hide' : 'Show'} Time Off Requests
-          </button>
-          <button
-            onClick={() => {
-              setShowMasterCalendar(!showMasterCalendar)
-              setShowTimeOffRequests(false)
-            }}
-            className={`px-6 py-4 rounded-xl font-semibold text-lg transition-all duration-300 ${
-              showMasterCalendar
-                ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white shadow-lg'
-                : 'bg-white dark:bg-gray-800 text-gray-700 dark:text-gray-300 hover:shadow-md border-2 border-purple-200 dark:border-purple-800'
-            }`}
-          >
-            {showMasterCalendar ? 'Hide' : 'Show'} Master Calendar
-          </button>
-        </div>
-
-        {/* Time Off Requests Dashboard */}
-        {showTimeOffRequests && (
-          <div className="mb-12">
-            <AdminDashboard requests={requests} onRefresh={handleRefresh} />
-          </div>
-        )}
-
-        {/* Master Calendar */}
-        {showMasterCalendar && (
-          <div className="mb-12">
-            <MasterCalendar requests={requests} />
-          </div>
-        )}
+        {/* Dashboard */}
+        <AdminDashboard requests={requests} onRefresh={handleRefresh} />
 
         {/* Drowning Requests Section */}
         <div className="mt-12">
           <DrowningAdmin />
         </div>
       </div>
-
     </div>
   )
 }

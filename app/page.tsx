@@ -15,9 +15,7 @@ export default function Home() {
     // Check if user is already logged in by calling /api/auth/me
     const checkAuth = async () => {
       try {
-        const response = await fetch('/api/auth/me', {
-          credentials: 'include',
-        })
+        const response = await fetch('/api/auth/me')
         if (response.ok) {
           const data = await response.json()
           if (data.isAdmin) {
@@ -111,7 +109,6 @@ export default function Home() {
           </div>
         </div>
       </div>
-
 
       {/* Loading Tim Overlay */}
       {isLoadingTim && (

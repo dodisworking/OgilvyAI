@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { startDate, endDate, natureOfNeed, dayBreakdown, sendToAll, userIds: selectedUserIds } = await request.json()
+    const { startDate, endDate, natureOfNeed, dayBreakdown, sendToAll } = await request.json()
 
     // Validation
     if (!startDate || !endDate) {
@@ -100,42 +100,47 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // If sendToAll is true, send email to all users; if selectedUserIds provided, send only to those users
-    const usersToNotify =
-      sendToAll
-        ? await db.user.findMany({ select: { id: true, name: true, email: true } })
-        : Array.isArray(selectedUserIds) && selectedUserIds.length > 0
-          ? await db.user.findMany({
-              where: { id: { in: selectedUserIds } },
-              select: { id: true, name: true, email: true },
-            })
-          : []
-
-    if (usersToNotify.length > 0) {
+    // If sendToAll is true, send email to all users
+    if (sendToAll) {
       try {
+        // Get all users
+        const allUsers = await db.user.findMany({
+          select: {
+            id: true,
+            name: true,
+            email: true,
+          },
+        })
+
+        // Import email function
         const { sendDrowningNotificationToUsers } = await import('@/lib/email')
+        
+        // Get base URL
         const host = request.headers.get('host') || 'localhost:3000'
         const protocol = request.headers.get('x-forwarded-proto') || 'http'
         const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `${protocol}://${host}`
 
+        // Send emails
         await sendDrowningNotificationToUsers({
           drowningUserName: user.name,
           drowningUserEmail: user.email,
           startDate: new Date(startDate),
           endDate: new Date(endDate),
           natureOfNeed: natureOfNeed || undefined,
-          usersToNotify,
+          usersToNotify: allUsers,
           baseUrl,
         })
 
+        // Update the request with notified users
         await db.drowningRequest.update({
           where: { id: newDrowningRequest.id },
           data: {
-            notifiedUsers: usersToNotify.map(u => u.id),
+            notifiedUsers: allUsers.map(u => u.id),
           },
         })
       } catch (emailError) {
         console.error('Failed to send emails:', emailError)
+        // Don't fail the request if email fails
       }
     }
 
