@@ -2662,15 +2662,16 @@ export default function ProductionScheduleMaker() {
     if (!Array.isArray(scheduleData)) return
     saveToHistory()
     // Normalize: infer mergeWithPrevious when same activity appears on consecutive days (AI sometimes omits it)
-    const sorted = [...scheduleData]
-      .filter((item: { date?: string }) => item && typeof item === 'object' && item.date && /^\d{4}-\d{2}-\d{2}$/.test(item.date))
-      .sort((a: { date: string }, b: { date: string }) => a.date.localeCompare(b.date))
+    const sorted = ([...scheduleData] as Array<{ date?: string; stripes?: unknown[] }>)
+      .filter((item) => item && typeof item === 'object' && item.date && /^\d{4}-\d{2}-\d{2}$/.test(item.date))
+      .sort((a, b) => (a.date || '').localeCompare(b.date || ''))
     
     // Track which activities appeared on the previous day (for merge detection)
     const prevDayActivities = new Set<string>()
-    const normalized = sorted.map((item: { date: string; stripes?: Array<{ activity: string; label?: string; mergeWithPrevious?: boolean }> }, idx: number) => {
+    const normalized = sorted.map((item, idx) => {
+      const typedItem = item as { date: string; stripes?: Array<{ activity: string; label?: string; mergeWithPrevious?: boolean }> }
       const currentDayActivities = new Set<string>()
-      const stripes = Array.isArray(item.stripes) ? item.stripes.map((stripe) => {
+      const stripes = Array.isArray(typedItem.stripes) ? typedItem.stripes.map((stripe) => {
         const activity = stripe.activity
         currentDayActivities.add(activity)
         
@@ -2687,7 +2688,7 @@ export default function ProductionScheduleMaker() {
       prevDayActivities.clear()
       currentDayActivities.forEach(a => prevDayActivities.add(a))
       
-      return { date: item.date, stripes }
+      return { date: typedItem.date, stripes }
     })
     const scheduleDataToUse = normalized
 
