@@ -1,227 +1,259 @@
 'use client'
 
-import { useState, useMemo } from 'react'
-import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, startOfWeek, endOfWeek, addMonths, subMonths, isSameDay, parseISO } from 'date-fns'
-import { Request } from '@/types'
+import { useState, useEffect, useMemo } from 'react'
+import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths, getDay } from 'date-fns'
 
-interface MasterCalendarProps {
-  requests: Request[]
+interface UserSchedule {
+  userId: string
+  userName: string
+  profilePicture?: string | null
+  requests: {
+    id: string
+    startDate: string
+    endDate: string
+    requestType: 'WFH' | 'TIME_OFF' | 'BOTH'
+    status: string
+    dayBreakdown?: Record<string, string>
+  }[]
 }
 
-export default function MasterCalendar({ requests }: MasterCalendarProps) {
+export default function MasterCalendar() {
   const [currentMonth, setCurrentMonth] = useState(new Date())
+  const [userSchedules, setUserSchedules] = useState<UserSchedule[]>([])
+  const [isLoading, setIsLoading] = useState(true)
+  const [selectedDay, setSelectedDay] = useState<string | null>(null)
 
-  // Filter to only approved requests
-  const approvedRequests = useMemo(() => {
-    return requests.filter(r => r.status === 'APPROVED')
-  }, [requests])
+  useEffect(() => {
+    fetchAllSchedules()
+  }, [currentMonth])
 
-  // Create a map of dates to requests for quick lookup
-  const dateToRequestsMap = useMemo(() => {
-    const map = new Map<string, Array<{ request: Request; type: 'TIME_OFF' | 'WFH' }>>()
-
-    approvedRequests.forEach(request => {
-      const startDate = new Date(request.startDate)
-      const endDate = new Date(request.endDate)
-      const days = eachDayOfInterval({ start: startDate, end: endDate })
-
-      // Parse dayBreakdown if available
-      let dayBreakdown: Record<string, 'TIME_OFF' | 'WFH'> = {}
-      if (request.dayBreakdown) {
-        if (typeof request.dayBreakdown === 'string') {
-          try {
-            dayBreakdown = JSON.parse(request.dayBreakdown)
-          } catch (e) {
-            console.error('Failed to parse dayBreakdown:', e)
-          }
-        } else {
-          dayBreakdown = request.dayBreakdown as Record<string, 'TIME_OFF' | 'WFH'>
-        }
+  const fetchAllSchedules = async () => {
+    setIsLoading(true)
+    try {
+      const response = await fetch('/api/admin/master-calendar')
+      if (response.ok) {
+        const data = await response.json()
+        setUserSchedules(data.schedules)
       }
+    } catch (error) {
+      console.error('Failed to fetch schedules:', error)
+    } finally {
+      setIsLoading(false)
+    }
+  }
 
-      days.forEach(day => {
-        const dateKey = format(day, 'yyyy-MM-dd')
-        const dayType = dayBreakdown[dateKey] || 
-          (request.requestType === 'BOTH' ? null : request.requestType === 'TIME_OFF' ? 'TIME_OFF' : 'WFH')
-
-        if (!map.has(dateKey)) {
-          map.set(dateKey, [])
-        }
-
-        // For BOTH requests without breakdown, add both types
-        if (request.requestType === 'BOTH' && !dayType) {
-          map.get(dateKey)!.push(
-            { request, type: 'TIME_OFF' },
-            { request, type: 'WFH' }
-          )
-        } else if (dayType) {
-          map.get(dateKey)!.push({ request, type: dayType })
-        } else {
-          // Fallback: use request type
-          const type = request.requestType === 'TIME_OFF' ? 'TIME_OFF' : 'WFH'
-          map.get(dateKey)!.push({ request, type })
-        }
-      })
-    })
-
-    return map
-  }, [approvedRequests])
-
-  // Get calendar days for current month
   const monthStart = startOfMonth(currentMonth)
   const monthEnd = endOfMonth(currentMonth)
-  const calendarStart = startOfWeek(monthStart, { weekStartsOn: 0 })
-  const calendarEnd = endOfWeek(monthEnd, { weekStartsOn: 0 })
-  const calendarDays = eachDayOfInterval({ start: calendarStart, end: calendarEnd })
+  const daysInMonth = eachDayOfInterval({ start: monthStart, end: monthEnd })
+  
+  // Get day of week for first day (0 = Sunday)
+  const startDayOfWeek = getDay(monthStart)
+  
+  // Create padding for days before the month starts
+  const paddingDays = Array(startDayOfWeek).fill(null)
 
-  const getDayInfo = (day: Date) => {
-    const dateKey = format(day, 'yyyy-MM-dd')
-    const dayRequests = dateToRequestsMap.get(dateKey) || []
+  // Build a map of date -> users with events
+  const dateEventsMap = useMemo(() => {
+    const map: Record<string, { wfh: UserSchedule[], timeOff: UserSchedule[] }> = {}
     
-    const timeOffRequests = dayRequests.filter(r => r.type === 'TIME_OFF')
-    const wfhRequests = dayRequests.filter(r => r.type === 'WFH')
+    userSchedules.forEach(user => {
+      user.requests.forEach(request => {
+        if (request.status !== 'APPROVED') return
+        
+        const start = new Date(request.startDate)
+        const end = new Date(request.endDate)
+        const days = eachDayOfInterval({ start, end })
+        
+        days.forEach(day => {
+          const dateStr = format(day, 'yyyy-MM-dd')
+          if (!map[dateStr]) {
+            map[dateStr] = { wfh: [], timeOff: [] }
+          }
+          
+          // Check day breakdown if available
+          let dayType = request.requestType
+          if (request.dayBreakdown && request.dayBreakdown[dateStr]) {
+            dayType = request.dayBreakdown[dateStr] as 'WFH' | 'TIME_OFF'
+          }
+          
+          if (dayType === 'WFH' || dayType === 'BOTH') {
+            if (!map[dateStr].wfh.find(u => u.userId === user.userId)) {
+              map[dateStr].wfh.push(user)
+            }
+          }
+          if (dayType === 'TIME_OFF' || dayType === 'BOTH') {
+            if (!map[dateStr].timeOff.find(u => u.userId === user.userId)) {
+              map[dateStr].timeOff.push(user)
+            }
+          }
+        })
+      })
+    })
     
-    return {
-      timeOffRequests,
-      wfhRequests,
-      hasTimeOff: timeOffRequests.length > 0,
-      hasWFH: wfhRequests.length > 0,
-      totalRequests: dayRequests.length
-    }
-  }
+    return map
+  }, [userSchedules])
 
-  const getDayColor = (day: Date) => {
-    const info = getDayInfo(day)
-    
-    if (info.hasTimeOff && info.hasWFH) {
-      return 'bg-gradient-to-br from-red-200 to-blue-200 dark:from-red-900/40 dark:to-blue-900/40 border-purple-300 dark:border-purple-700'
-    } else if (info.hasTimeOff) {
-      return 'bg-red-200 dark:bg-red-900/40 border-red-300 dark:border-red-700'
-    } else if (info.hasWFH) {
-      return 'bg-blue-200 dark:bg-blue-900/40 border-blue-300 dark:border-blue-700'
-    }
-    
-    return 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700'
-  }
-
-  const navigateMonth = (direction: 'prev' | 'next') => {
-    setCurrentMonth(prev => direction === 'prev' ? subMonths(prev, 1) : addMonths(prev, 1))
-  }
+  const selectedDayData = selectedDay ? dateEventsMap[selectedDay] : null
 
   return (
-    <div className="bg-white dark:bg-gray-800 rounded-xl p-6 shadow-lg">
-      <div className="mb-6">
-        <h2 className="text-2xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent mb-2">
-          Master Calendar
+    <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-xl p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-2xl font-bold text-gray-800 dark:text-white">
+          Master Calendar - Team Coverage
         </h2>
-        <p className="text-gray-600 dark:text-gray-400 text-sm">
-          View all approved time off and work from home schedules
-        </p>
-      </div>
-
-      {/* Month Navigation */}
-      <div className="flex items-center justify-between mb-6">
-        <button
-          onClick={() => navigateMonth('prev')}
-          className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-        >
-          ← Previous
-        </button>
-        <h3 className="text-xl font-semibold text-gray-800 dark:text-gray-200">
-          {format(currentMonth, 'MMMM yyyy')}
-        </h3>
-        <button
-          onClick={() => navigateMonth('next')}
-          className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
-        >
-          Next →
-        </button>
-      </div>
-
-      {/* Calendar Grid */}
-      <div className="grid grid-cols-7 gap-2">
-        {/* Day Headers */}
-        {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day) => (
-          <div
-            key={day}
-            className="text-center font-semibold text-gray-600 dark:text-gray-400 py-2"
+        <div className="flex gap-2">
+          <button
+            onClick={() => setCurrentMonth(subMonths(currentMonth, 1))}
+            className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
           >
-            {day}
-          </div>
-        ))}
-
-        {/* Calendar Days */}
-        {calendarDays.map((day, idx) => {
-          const info = getDayInfo(day)
-          const inMonth = isSameMonth(day, currentMonth)
-          const isToday = isSameDay(day, new Date())
-          const dayColor = getDayColor(day)
-
-          return (
-            <div
-              key={idx}
-              className={`
-                min-h-[100px] p-2 rounded-lg border-2 transition-all
-                ${dayColor}
-                ${!inMonth ? 'opacity-40' : ''}
-                ${isToday ? 'ring-2 ring-purple-500 ring-offset-2' : ''}
-                ${info.totalRequests > 0 ? 'cursor-pointer hover:shadow-md' : ''}
-              `}
-              title={info.totalRequests > 0 ? `${info.totalRequests} request(s) on this day` : undefined}
-            >
-              <div className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                {format(day, 'd')}
-              </div>
-              
-              {/* Show request info */}
-              {info.totalRequests > 0 && (
-                <div className="space-y-1 text-xs">
-                  {info.timeOffRequests.length > 0 && (
-                    <div className="text-red-700 dark:text-red-300 font-medium">
-                      🏖️ {info.timeOffRequests.length} Time Off
-                    </div>
-                  )}
-                  {info.wfhRequests.length > 0 && (
-                    <div className="text-blue-700 dark:text-blue-300 font-medium">
-                      🏠 {info.wfhRequests.length} WFH
-                    </div>
-                  )}
-                  
-                  {/* Show user names */}
-                  <div className="mt-1 space-y-0.5">
-                    {Array.from(new Set(info.timeOffRequests.map(r => r.request.user?.name).filter(Boolean))).map((name, i) => (
-                      <div key={`to-${i}`} className="text-red-600 dark:text-red-400 truncate">
-                        {name}
-                      </div>
-                    ))}
-                    {Array.from(new Set(info.wfhRequests.map(r => r.request.user?.name).filter(Boolean))).map((name, i) => (
-                      <div key={`wfh-${i}`} className="text-blue-600 dark:text-blue-400 truncate">
-                        {name}
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-            </div>
-          )
-        })}
+            ← Prev
+          </button>
+          <button
+            onClick={() => setCurrentMonth(new Date())}
+            className="px-4 py-2 rounded-lg bg-purple-100 dark:bg-purple-900 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800 transition-colors"
+          >
+            Today
+          </button>
+          <button
+            onClick={() => setCurrentMonth(addMonths(currentMonth, 1))}
+            className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+          >
+            Next →
+          </button>
+        </div>
       </div>
+
+      <h3 className="text-xl font-semibold text-center mb-4 text-gray-700 dark:text-gray-200">
+        {format(currentMonth, 'MMMM yyyy')}
+      </h3>
 
       {/* Legend */}
-      <div className="mt-6 flex flex-wrap gap-4 justify-center text-sm">
+      <div className="flex gap-6 mb-4 justify-center">
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded bg-red-200 dark:bg-red-900/40 border border-red-300 dark:border-red-700"></div>
-          <span className="text-gray-700 dark:text-gray-300">Time Off</span>
+          <div className="w-4 h-4 rounded bg-red-400"></div>
+          <span className="text-sm text-gray-600 dark:text-gray-400">Time Off</span>
         </div>
         <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded bg-blue-200 dark:bg-blue-900/40 border border-blue-300 dark:border-blue-700"></div>
-          <span className="text-gray-700 dark:text-gray-300">Work From Home</span>
-        </div>
-        <div className="flex items-center gap-2">
-          <div className="w-4 h-4 rounded bg-gradient-to-br from-red-200 to-blue-200 dark:from-red-900/40 dark:to-blue-900/40 border border-purple-300 dark:border-purple-700"></div>
-          <span className="text-gray-700 dark:text-gray-300">Both</span>
+          <div className="w-4 h-4 rounded bg-blue-400"></div>
+          <span className="text-sm text-gray-600 dark:text-gray-400">WFH</span>
         </div>
       </div>
+
+      {isLoading ? (
+        <div className="flex justify-center py-12">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div>
+        </div>
+      ) : (
+        <div className="grid grid-cols-7 gap-1">
+          {/* Day headers */}
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => (
+            <div key={day} className="text-center py-2 text-sm font-semibold text-gray-500 dark:text-gray-400">
+              {day}
+            </div>
+          ))}
+          
+          {/* Padding days */}
+          {paddingDays.map((_, idx) => (
+            <div key={`pad-${idx}`} className="aspect-square"></div>
+          ))}
+          
+          {/* Calendar days */}
+          {daysInMonth.map(day => {
+            const dateStr = format(day, 'yyyy-MM-dd')
+            const events = dateEventsMap[dateStr]
+            const hasTimeOff = events?.timeOff?.length > 0
+            const hasWFH = events?.wfH?.length > 0 || events?.wfh?.length > 0
+            const totalPeople = (events?.timeOff?.length || 0) + (events?.wfh?.length || 0)
+            
+            return (
+              <div
+                key={dateStr}
+                onClick={() => setSelectedDay(selectedDay === dateStr ? null : dateStr)}
+                className={`
+                  aspect-square p-1 rounded-lg cursor-pointer transition-all border-2
+                  ${isToday(day) ? 'border-purple-500' : 'border-transparent'}
+                  ${selectedDay === dateStr ? 'ring-2 ring-purple-400' : ''}
+                  ${!isSameMonth(day, currentMonth) ? 'opacity-30' : ''}
+                  hover:bg-gray-50 dark:hover:bg-gray-700
+                `}
+              >
+                <div className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                  {format(day, 'd')}
+                </div>
+                <div className="flex flex-col gap-0.5">
+                  {hasTimeOff && (
+                    <div className="h-2 rounded bg-red-400 flex items-center justify-center">
+                      <span className="text-[8px] text-white font-bold">{events?.timeOff?.length}</span>
+                    </div>
+                  )}
+                  {(events?.wfh?.length || 0) > 0 && (
+                    <div className="h-2 rounded bg-blue-400 flex items-center justify-center">
+                      <span className="text-[8px] text-white font-bold">{events?.wfh?.length}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )
+          })}
+        </div>
+      )}
+
+      {/* Selected Day Detail */}
+      {selectedDay && selectedDayData && (
+        <div className="mt-6 p-4 bg-gray-50 dark:bg-gray-700 rounded-xl">
+          <h4 className="font-semibold text-lg mb-3 text-gray-800 dark:text-white">
+            {format(new Date(selectedDay), 'EEEE, MMMM d, yyyy')}
+          </h4>
+          
+          {selectedDayData.timeOff.length > 0 && (
+            <div className="mb-4">
+              <h5 className="text-sm font-medium text-red-600 dark:text-red-400 mb-2">
+                🏖️ Time Off ({selectedDayData.timeOff.length})
+              </h5>
+              <div className="flex flex-wrap gap-2">
+                {selectedDayData.timeOff.map(user => (
+                  <div key={user.userId} className="flex items-center gap-2 bg-red-100 dark:bg-red-900/30 px-3 py-1 rounded-full">
+                    {user.profilePicture ? (
+                      <img src={user.profilePicture} alt={user.userName} className="w-6 h-6 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-red-300 flex items-center justify-center text-xs font-bold text-red-800">
+                        {user.userName[0]}
+                      </div>
+                    )}
+                    <span className="text-sm text-red-800 dark:text-red-200">{user.userName}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {selectedDayData.wfh.length > 0 && (
+            <div>
+              <h5 className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-2">
+                🏠 Working From Home ({selectedDayData.wfh.length})
+              </h5>
+              <div className="flex flex-wrap gap-2">
+                {selectedDayData.wfh.map(user => (
+                  <div key={user.userId} className="flex items-center gap-2 bg-blue-100 dark:bg-blue-900/30 px-3 py-1 rounded-full">
+                    {user.profilePicture ? (
+                      <img src={user.profilePicture} alt={user.userName} className="w-6 h-6 rounded-full object-cover" />
+                    ) : (
+                      <div className="w-6 h-6 rounded-full bg-blue-300 flex items-center justify-center text-xs font-bold text-blue-800">
+                        {user.userName[0]}
+                      </div>
+                    )}
+                    <span className="text-sm text-blue-800 dark:text-blue-200">{user.userName}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          
+          {selectedDayData.timeOff.length === 0 && selectedDayData.wfh.length === 0 && (
+            <p className="text-gray-500 dark:text-gray-400">Everyone is in the office! 🎉</p>
+          )}
+        </div>
+      )}
     </div>
   )
 }
