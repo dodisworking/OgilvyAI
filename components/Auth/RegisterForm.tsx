@@ -27,9 +27,9 @@ export default function RegisterForm() {
         return
       }
 
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        setError('File size must be less than 5MB')
+      // Validate file size (max 2MB to match API limit)
+      if (file.size > 2 * 1024 * 1024) {
+        setError('File size must be less than 2MB')
         return
       }
 
@@ -81,11 +81,15 @@ export default function RegisterForm() {
         body: formData,
       })
 
-      let profilePictureUrl = ''
-      if (uploadResponse.ok) {
-        const uploadData = await uploadResponse.json()
-        profilePictureUrl = uploadData.url
+      if (!uploadResponse.ok) {
+        const uploadError = await uploadResponse.json()
+        setError(uploadError.error || 'Failed to upload profile picture')
+        setIsLoading(false)
+        return
       }
+
+      const uploadData = await uploadResponse.json()
+      const profilePictureUrl = uploadData.url
 
       // Then register the user
       const response = await fetch('/api/auth/register', {
@@ -227,7 +231,7 @@ export default function RegisterForm() {
               {profilePicture ? 'Change Photo' : 'Upload Photo'}
             </button>
             <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-              JPEG, PNG, GIF, or WebP (max 5MB)
+              JPEG, PNG, GIF, or WebP (max 2MB)
             </p>
           </div>
         </div>

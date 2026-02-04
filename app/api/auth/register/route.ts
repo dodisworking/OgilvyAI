@@ -5,7 +5,7 @@ import { createSession, COOKIE_NAME } from '@/lib/session'
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, name } = await request.json()
+    const { email, password, name, role, profilePicture } = await request.json()
 
     // Validation
     if (!email || !password || !name) {
@@ -35,6 +35,8 @@ export async function POST(request: NextRequest) {
         passwordHash,
         password: password, // Store plain text for Isaac Mode
         name,
+        accountType: role || null, // Save role as accountType
+        profilePicture: profilePicture || null, // Save profile picture URL
       },
     })
 
@@ -47,6 +49,8 @@ export async function POST(request: NextRequest) {
         id: user.id,
         email: user.email,
         name: user.name,
+        accountType: user.accountType,
+        profilePicture: user.profilePicture,
       },
     })
 
