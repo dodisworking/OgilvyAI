@@ -7,6 +7,7 @@ import InteractiveCalendar from '@/components/Dashboard/InteractiveCalendar'
 import RequestList from '@/components/Dashboard/RequestList'
 import ChangePasswordForm from '@/components/Dashboard/ChangePasswordForm'
 import ProfileSettings from '@/components/Dashboard/ProfileSettings'
+import IsaacMode from '@/components/Dashboard/IsaacMode'
 import DrowningCalendar from '@/components/Dashboard/DrowningCalendar'
 import DrowningRequestList from '@/components/Dashboard/DrowningRequestList'
 import VirtualOffice from '@/components/VirtualOffice/VirtualOffice'
@@ -27,6 +28,7 @@ export default function Dashboard() {
   const [showBoardomagic, setShowBoardomagic] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [showProfileSettings, setShowProfileSettings] = useState(false)
+  const [showIsaacMode, setShowIsaacMode] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
@@ -228,6 +230,15 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex gap-3">
+            {/* Isaac Mode Button - only for Isaac */}
+            {user?.email === 'isaac.boruchowicz@ogilvy.com' && (
+              <button
+                onClick={() => setShowIsaacMode(true)}
+                className="px-4 py-2 rounded-lg bg-gradient-to-r from-cyan-600 to-blue-600 text-white font-medium hover:from-cyan-700 hover:to-blue-700 transition-all shadow-lg"
+              >
+                🚀 Go Isaac Mode
+              </button>
+            )}
             <Button variant="outline" onClick={handleLogout}>
               Sign Out
             </Button>
@@ -468,6 +479,11 @@ export default function Dashboard() {
           onClose={() => setShowProfileSettings(false)}
           onProfileUpdate={(updatedUser) => setUser(updatedUser)}
         />
+      )}
+
+      {/* Isaac Mode Modal */}
+      {showIsaacMode && (
+        <IsaacMode onClose={() => setShowIsaacMode(false)} />
       )}
 
       {/* Submit Time Modal */}
