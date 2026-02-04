@@ -3,11 +3,18 @@
 import { useState, useEffect, useMemo } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameMonth, isToday, addMonths, subMonths, getDay, isWeekend } from 'date-fns'
 
+interface UserColor {
+  bg: string
+  border: string
+  text: string
+  light: string
+}
+
 interface UserSchedule {
   userId: string
   userName: string
   profilePicture?: string | null
-  color?: string
+  color?: UserColor
   requests: {
     id: string
     startDate: string
@@ -68,9 +75,11 @@ export default function MasterCalendar() {
 
   // Create a map of userId -> color
   const userColorMap = useMemo(() => {
-    const map: Record<string, typeof USER_COLORS[0]> = {}
+    const map: Record<string, UserColor> = {}
     usersWithColors.forEach(user => {
-      map[user.userId] = user.color!
+      if (user.color) {
+        map[user.userId] = user.color
+      }
     })
     return map
   }, [usersWithColors])
