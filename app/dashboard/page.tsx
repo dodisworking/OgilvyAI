@@ -6,6 +6,7 @@ import MenuBubble from '@/components/Dashboard/MenuBubble'
 import InteractiveCalendar from '@/components/Dashboard/InteractiveCalendar'
 import RequestList from '@/components/Dashboard/RequestList'
 import ChangePasswordForm from '@/components/Dashboard/ChangePasswordForm'
+import ProfileSettings from '@/components/Dashboard/ProfileSettings'
 import DrowningCalendar from '@/components/Dashboard/DrowningCalendar'
 import DrowningRequestList from '@/components/Dashboard/DrowningRequestList'
 import VirtualOffice from '@/components/VirtualOffice/VirtualOffice'
@@ -25,6 +26,7 @@ export default function Dashboard() {
   const [showProductionSchedule, setShowProductionSchedule] = useState(false)
   const [showBoardomagic, setShowBoardomagic] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
+  const [showProfileSettings, setShowProfileSettings] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
@@ -197,17 +199,27 @@ export default function Dashboard() {
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center gap-4">
-            {user?.profilePicture ? (
-              <img
-                src={user.profilePicture}
-                alt={user?.name || 'User'}
-                className="w-16 h-16 rounded-full object-cover border-2 border-purple-300 shadow-md"
-              />
-            ) : (
-              <div className="w-16 h-16 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 flex items-center justify-center text-white font-semibold text-2xl shadow-md">
-                {(user?.name || 'U')[0].toUpperCase()}
+            {/* Clickable Profile Picture */}
+            <div 
+              onClick={() => setShowProfileSettings(true)}
+              className="relative cursor-pointer group"
+            >
+              {user?.profilePicture ? (
+                <img
+                  src={user.profilePicture}
+                  alt={user?.name || 'User'}
+                  className="w-16 h-16 rounded-full object-cover border-2 border-purple-300 shadow-md group-hover:border-purple-500 transition-all"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 flex items-center justify-center text-white font-semibold text-2xl shadow-md group-hover:from-purple-500 group-hover:to-pink-500 transition-all">
+                  {(user?.name || 'U')[0].toUpperCase()}
+                </div>
+              )}
+              {/* Settings indicator */}
+              <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-gray-700 rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="text-xs">⚙️</span>
               </div>
-            )}
+            </div>
             <div>
               <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
                 Welcome back, {user?.name}!
@@ -216,9 +228,6 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={() => setShowChangePassword(true)}>
-              Change Password
-            </Button>
             <Button variant="outline" onClick={handleLogout}>
               Sign Out
             </Button>
@@ -450,6 +459,15 @@ export default function Dashboard() {
 
       {showChangePassword && (
         <ChangePasswordForm onClose={() => setShowChangePassword(false)} />
+      )}
+
+      {/* Profile Settings Modal */}
+      {showProfileSettings && user && (
+        <ProfileSettings
+          user={user}
+          onClose={() => setShowProfileSettings(false)}
+          onProfileUpdate={(updatedUser) => setUser(updatedUser)}
+        />
       )}
 
       {/* Submit Time Modal */}

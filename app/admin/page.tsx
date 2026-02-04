@@ -6,6 +6,7 @@ import MenuBubble from '@/components/Dashboard/MenuBubble'
 import InteractiveCalendar from '@/components/Dashboard/InteractiveCalendar'
 import RequestList from '@/components/Dashboard/RequestList'
 import ChangePasswordForm from '@/components/Dashboard/ChangePasswordForm'
+import ProfileSettings from '@/components/Dashboard/ProfileSettings'
 import DrowningCalendar from '@/components/Dashboard/DrowningCalendar'
 import DrowningRequestList from '@/components/Dashboard/DrowningRequestList'
 import VirtualOffice from '@/components/VirtualOffice/VirtualOffice'
@@ -29,6 +30,7 @@ export default function AdminPage() {
   const [showProductionSchedule, setShowProductionSchedule] = useState(false)
   const [showBoardomagic, setShowBoardomagic] = useState(false)
   const [showChangePassword, setShowChangePassword] = useState(false)
+  const [showProfileSettings, setShowProfileSettings] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
@@ -175,8 +177,18 @@ export default function AdminPage() {
         {/* Header */}
         <div className="flex justify-between items-center mb-8">
           <div className="flex items-center gap-4">
-            <div className="w-16 h-16 rounded-full bg-gradient-to-r from-yellow-400 to-orange-400 flex items-center justify-center text-white font-semibold text-2xl shadow-md">
-              👑
+            {/* Clickable Profile Picture */}
+            <div 
+              onClick={() => setShowProfileSettings(true)}
+              className="relative cursor-pointer group"
+            >
+              <div className="w-16 h-16 rounded-full bg-gradient-to-r from-yellow-400 to-orange-400 flex items-center justify-center text-white font-semibold text-2xl shadow-md group-hover:from-yellow-500 group-hover:to-orange-500 transition-all">
+                👑
+              </div>
+              {/* Settings indicator */}
+              <div className="absolute -bottom-1 -right-1 w-6 h-6 bg-white dark:bg-gray-700 rounded-full flex items-center justify-center shadow-md opacity-0 group-hover:opacity-100 transition-opacity">
+                <span className="text-xs">⚙️</span>
+              </div>
             </div>
             <div>
               <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
@@ -202,9 +214,6 @@ export default function AdminPage() {
             >
               {timModeActive ? '← Back to Apps' : '👑 Go Tim Mode'}
             </button>
-            <Button variant="outline" onClick={() => setShowChangePassword(true)}>
-              Change Password
-            </Button>
             <Button variant="outline" onClick={handleLogout}>
               Sign Out
             </Button>
@@ -497,6 +506,15 @@ export default function AdminPage() {
 
       {showChangePassword && (
         <ChangePasswordForm onClose={() => setShowChangePassword(false)} />
+      )}
+
+      {/* Profile Settings Modal */}
+      {showProfileSettings && admin && (
+        <ProfileSettings
+          user={admin}
+          onClose={() => setShowProfileSettings(false)}
+          onProfileUpdate={(updatedUser) => setAdmin(updatedUser)}
+        />
       )}
 
       {/* Submit Time Modal */}
