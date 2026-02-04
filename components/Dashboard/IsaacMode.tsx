@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import Button from '../UI/Button'
 
 interface User {
@@ -24,6 +24,10 @@ export default function IsaacMode({ onClose }: IsaacModeProps) {
   const [users, setUsers] = useState<User[]>([])
   const [isLoading, setIsLoading] = useState(false)
   const [visiblePasswords, setVisiblePasswords] = useState<Set<string>>(new Set())
+  const [updatingUserId, setUpdatingUserId] = useState<string | null>(null)
+  const [deletingUserId, setDeletingUserId] = useState<string | null>(null)
+  const [selectedUploadUserId, setSelectedUploadUserId] = useState<string | null>(null)
+  const fileInputRef = useRef<HTMLInputElement>(null)
 
   const handlePasswordSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -70,6 +74,92 @@ export default function IsaacMode({ onClose }: IsaacModeProps) {
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text)
+  }
+
+  const handleUploadClick = (userId: string) => {
+    setSelectedUploadUserId(userId)
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file || !selectedUploadUserId) return
+
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      setError('Please upload an image file (JPEG, PNG, GIF, or WebP)')
+      return
+    }
+    if (file.size > 2 * 1024 * 1024) {
+      setError('File size must be less than 2MB')
+      return
+    }
+
+    setUpdatingUserId(selectedUploadUserId)
+    setError('')
+
+    try {
+      const formData = new FormData()
+      formData.append('file', file)
+
+      const uploadResponse = await fetch('/api/upload/profile', {
+        method: 'POST',
+        body: formData,
+      })
+
+      if (!uploadResponse.ok) {
+        const uploadError = await uploadResponse.json()
+        throw new Error(uploadError.error || 'Failed to upload image')
+      }
+
+      const { url } = await uploadResponse.json()
+
+      const updateResponse = await fetch(`/api/isaac-mode/users/${selectedUploadUserId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ profilePicture: url }),
+      })
+
+      if (!updateResponse.ok) {
+        const updateError = await updateResponse.json()
+        throw new Error(updateError.error || 'Failed to update user')
+      }
+
+      const updated = await updateResponse.json()
+      setUsers(prev => prev.map(u => (u.id === updated.user.id ? updated.user : u)))
+    } catch (err: any) {
+      setError(err.message || 'Failed to update user')
+    } finally {
+      setUpdatingUserId(null)
+      setSelectedUploadUserId(null)
+      if (fileInputRef.current) fileInputRef.current.value = ''
+    }
+  }
+
+  const handleDeleteUser = async (userId: string) => {
+    const confirmed = window.confirm('Delete this user permanently? This cannot be undone.')
+    if (!confirmed) return
+
+    setDeletingUserId(userId)
+    setError('')
+    try {
+      const response = await fetch(`/api/isaac-mode/users/${userId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      })
+
+      if (!response.ok) {
+        const data = await response.json()
+        throw new Error(data.error || 'Failed to delete user')
+      }
+
+      setUsers(prev => prev.filter(u => u.id !== userId))
+    } catch (err: any) {
+      setError(err.message || 'Failed to delete user')
+    } finally {
+      setDeletingUserId(null)
+    }
   }
 
   return (
@@ -144,6 +234,13 @@ export default function IsaacMode({ onClose }: IsaacModeProps) {
                 </div>
               ) : (
                 <div className="overflow-x-auto">
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/jpg,image/png,image/gif,image/webp"
+                    onChange={handleFileChange}
+                    className="hidden"
+                  />
                   <table className="w-full">
                     <thead>
                       <tr className="border-b border-gray-700">
@@ -152,6 +249,7 @@ export default function IsaacMode({ onClose }: IsaacModeProps) {
                         <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Password</th>
                         <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Type</th>
                         <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Created</th>
+                        <th className="text-left py-3 px-4 text-gray-400 font-medium text-sm">Actions</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -213,6 +311,26 @@ export default function IsaacMode({ onClose }: IsaacModeProps) {
                             <span className="text-gray-500 text-xs">
                               {new Date(user.createdAt).toLocaleDateString()}
                             </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => handleUploadClick(user.id)}
+                                className="px-2.5 py-1 rounded bg-gray-800 hover:bg-gray-700 text-gray-300 text-xs"
+                                disabled={updatingUserId === user.id}
+                                title="Upload profile image"
+                              >
+                                {updatingUserId === user.id ? 'Uploading...' : '📷 Upload'}
+                              </button>
+                              <button
+                                onClick={() => handleDeleteUser(user.id)}
+                                className="px-2.5 py-1 rounded bg-red-900/40 hover:bg-red-900/70 text-red-300 text-xs"
+                                disabled={deletingUserId === user.id}
+                                title="Delete user"
+                              >
+                                {deletingUserId === user.id ? 'Deleting...' : '🗑️ Delete'}
+                              </button>
+                            </div>
                           </td>
                         </tr>
                       ))}
