@@ -12,14 +12,34 @@ export async function PUT(request: NextRequest) {
     }
 
     const body = await request.json()
-    const { profilePicture } = body
+    const { profilePicture, accountType } = body
+
+    // Build update data - only include fields that were provided
+    const updateData: { profilePicture?: string | null; accountType?: string | null } = {}
+    
+    if (profilePicture !== undefined) {
+      updateData.profilePicture = profilePicture
+    }
+    
+    if (accountType !== undefined) {
+      const normalizedRole =
+        typeof accountType === 'string' ? accountType.trim().toUpperCase() : undefined
+      const allowedRoles = ['PRODUCER', 'CREATIVE', 'CLIENT', 'OTHER']
+
+      if (normalizedRole && !allowedRoles.includes(normalizedRole)) {
+        return NextResponse.json(
+          { error: 'Invalid account type' },
+          { status: 400 }
+        )
+      }
+
+      updateData.accountType = normalizedRole || null
+    }
 
     // Update user in database
     const updatedUser = await db.user.update({
       where: { id: session.userId },
-      data: {
-        profilePicture: profilePicture ?? null,
-      },
+      data: updateData,
       select: {
         id: true,
         email: true,

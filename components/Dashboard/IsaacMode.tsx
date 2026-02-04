@@ -202,11 +202,11 @@ export default function IsaacMode({ onClose }: IsaacModeProps) {
                           </td>
                           <td className="py-3 px-4">
                             <span className={`text-xs px-2 py-1 rounded ${
-                              user.accountType === 'producer' 
+                              user.accountType === 'PRODUCER' 
                                 ? 'bg-purple-900/50 text-purple-300' 
                                 : 'bg-blue-900/50 text-blue-300'
                             }`}>
-                              {user.accountType || 'user'}
+                              {user.accountType ? user.accountType.toLowerCase() : 'user'}
                             </span>
                           </td>
                           <td className="py-3 px-4">

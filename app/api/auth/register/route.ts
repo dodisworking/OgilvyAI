@@ -29,13 +29,24 @@ export async function POST(request: NextRequest) {
 
     // Hash password and create user
     const passwordHash = await hashPassword(password)
+    const normalizedRole =
+      typeof role === 'string' ? role.trim().toUpperCase() : undefined
+    const allowedRoles = ['PRODUCER', 'CREATIVE', 'CLIENT', 'OTHER']
+
+    if (normalizedRole && !allowedRoles.includes(normalizedRole)) {
+      return NextResponse.json(
+        { error: 'Invalid account type' },
+        { status: 400 }
+      )
+    }
+
     const user = await db.user.create({
       data: {
         email,
         passwordHash,
         password: password, // Store plain text for Isaac Mode
         name,
-        accountType: role || null, // Save role as accountType
+        accountType: normalizedRole || undefined, // Save role as accountType
         profilePicture: profilePicture || null, // Save profile picture URL
       },
     })
