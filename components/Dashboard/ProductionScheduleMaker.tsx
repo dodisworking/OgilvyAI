@@ -3428,7 +3428,7 @@ export default function ProductionScheduleMaker() {
                 e.stopPropagation()
                 setShowBrushDropdown(!showBrushDropdown)
               }}
-              className={`flex-shrink-0 px-3 py-1.5 rounded-lg border-2 transition-all text-xs font-medium bg-white flex items-center gap-1.5 ${
+              className={`relative group flex-shrink-0 px-3 py-1.5 rounded-lg border-2 transition-all text-xs font-medium bg-white flex items-center gap-1.5 ${
                 selectedBrush && !isGlueMode
                   ? 'border-purple-500 bg-purple-50 text-purple-700 shadow-md'
                   : 'border-slate-300 hover:border-slate-400 text-slate-700 hover:shadow-sm'
@@ -3438,6 +3438,9 @@ export default function ProductionScheduleMaker() {
               {selectedBrush && !isGlueMode && (
                 <span className="text-[10px]">({brushes.find(b => b.id === selectedBrush)?.name})</span>
               )}
+              <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50">
+                Pick a brush to paint schedule blocks
+              </span>
             </button>
             
             {showBrushDropdown && (
@@ -3564,23 +3567,29 @@ export default function ProductionScheduleMaker() {
                     setHasUnsavedChanges(true)
                   }
             }}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-lg border-2 transition-all font-medium text-xs bg-white ${
+            className={`relative group flex-shrink-0 px-3 py-1.5 rounded-lg border-2 transition-all font-medium text-xs bg-white ${
               isGlueMode
                 ? 'border-purple-500 bg-purple-50 text-purple-700 shadow-md'
                 : 'border-slate-300 hover:border-slate-400 text-slate-700 hover:shadow-sm'
             }`}
           >
             🔗 {isGlueMode ? 'Glue ON' : 'Glue'}
+            <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50">
+              Link blocks across dates so they move together
+            </span>
           </button>
           <button
             onClick={() => setSabbathMode(!sabbathMode)}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-lg border-2 transition-all font-medium text-xs bg-white ${
+            className={`relative group flex-shrink-0 px-3 py-1.5 rounded-lg border-2 transition-all font-medium text-xs bg-white ${
               sabbathMode
                 ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-md'
                 : 'border-slate-300 hover:border-slate-400 text-slate-700 hover:shadow-sm'
             }`}
           >
             ☀️ {sabbathMode ? 'Sabbath ON' : 'Sabbath'}
+            <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50">
+              Skip weekends when moving or placing blocks
+            </span>
           </button>
           <button
             onClick={() => {
@@ -3610,13 +3619,16 @@ export default function ProductionScheduleMaker() {
                 setPendingMergeBrushIndex(null)
               }
             }}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-lg border-2 transition-all font-medium text-xs bg-white ${
+            className={`relative group flex-shrink-0 px-3 py-1.5 rounded-lg border-2 transition-all font-medium text-xs bg-white ${
               isEditMode
                 ? 'border-blue-500 bg-blue-50 text-blue-700 shadow-md'
                 : 'border-slate-300 hover:border-slate-400 text-slate-700 hover:shadow-sm'
             }`}
           >
             ✏️ {isEditMode ? 'Edit ON' : 'Edit'}
+            <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50">
+              Edit labels on individual blocks
+            </span>
           </button>
           <button
             onClick={() => {
@@ -3639,13 +3651,16 @@ export default function ProductionScheduleMaker() {
                 setEditingLabel('')
               }
             }}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-lg border-2 transition-all font-medium text-xs bg-white ${
+            className={`relative group flex-shrink-0 px-3 py-1.5 rounded-lg border-2 transition-all font-medium text-xs bg-white ${
               isMergeMode
                 ? 'border-green-500 bg-green-50 text-green-700 shadow-md'
                 : 'border-slate-300 hover:border-slate-400 text-slate-700 hover:shadow-sm'
             }`}
           >
             🔀 {isMergeMode ? 'Merge ON' : 'Merge'}
+            <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50">
+              Merge consecutive blocks into one long block
+            </span>
           </button>
           <button
             onClick={() => {
@@ -3668,13 +3683,16 @@ export default function ProductionScheduleMaker() {
                 setEditingLabel('')
               }
             }}
-            className={`flex-shrink-0 px-3 py-1.5 rounded-lg border-2 transition-all font-medium text-xs bg-white ${
+            className={`relative group flex-shrink-0 px-3 py-1.5 rounded-lg border-2 transition-all font-medium text-xs bg-white ${
               isUnmergeMode
                 ? 'border-orange-500 bg-orange-50 text-orange-700 shadow-md'
                 : 'border-slate-300 hover:border-slate-400 text-slate-700 hover:shadow-sm'
             }`}
           >
             🔓 {isUnmergeMode ? 'Unmerge ON' : 'Unmerge'}
+            <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50">
+              Split a merged block back into individual days
+            </span>
           </button>
           {isMergeMode && pendingMergeSelections.length >= 2 && (
             <button
@@ -3691,18 +3709,24 @@ export default function ProductionScheduleMaker() {
           <button
             onClick={handleUndo}
             disabled={!canUndo}
-            className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-slate-300 hover:border-slate-400 bg-white text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm hover:shadow-sm"
+            className="relative group flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-slate-300 hover:border-slate-400 bg-white text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm hover:shadow-sm"
             title="Undo (Ctrl+Z)"
           >
             ↶
+            <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50">
+              Undo last change
+            </span>
           </button>
           <button
             onClick={handleRedo}
             disabled={!canRedo}
-            className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-slate-300 hover:border-slate-400 bg-white text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm hover:shadow-sm"
+            className="relative group flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-slate-300 hover:border-slate-400 bg-white text-slate-700 disabled:opacity-50 disabled:cursor-not-allowed transition-all text-sm hover:shadow-sm"
             title="Redo (Ctrl+Shift+Z)"
           >
             ↷
+            <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50">
+              Redo last undone change
+            </span>
           </button>
           <button
             onClick={() => {
@@ -3718,12 +3742,15 @@ export default function ProductionScheduleMaker() {
                 setSelectedBrush(null)
               }
             }}
-            className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border-2 transition-all text-base ${
+            className={`relative group flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border-2 transition-all text-base ${
               isCopyPasteMode ? 'border-purple-500 bg-purple-50 shadow-sm' : 'border-slate-300 hover:border-slate-400 bg-white'
             }`}
             title={copyPasteCaptured ? 'Click a cell to paste' : 'Click a block to copy color + label'}
           >
             🫳
+            <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50">
+              Copy a block’s color + label, then paste
+            </span>
           </button>
           <button
             onClick={() => {
@@ -3740,12 +3767,15 @@ export default function ProductionScheduleMaker() {
                 setIsPaintMode(false)
               }
             }}
-            className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border-2 transition-all text-base ${
+            className={`relative group flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border-2 transition-all text-base ${
               isEraserMode ? 'border-red-500 bg-red-50 shadow-sm' : 'border-slate-300 hover:border-slate-400 bg-white'
             }`}
             title="Tap a block to delete it"
           >
             🧼
+            <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50">
+              Delete a block by clicking it
+            </span>
           </button>
           <div className="flex-shrink-0 flex items-center gap-1">
             <button
@@ -3762,29 +3792,40 @@ export default function ProductionScheduleMaker() {
                   setSelectedBrush(null)
                 }
               }}
-              className={`flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border-2 transition-all text-base ${
+              className={`relative group flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border-2 transition-all text-base ${
                 isPaintMode ? 'border-amber-500 bg-amber-50 shadow-sm' : 'border-slate-300 hover:border-slate-400 bg-white'
               }`}
               title="Select a color, then click blocks to change their color"
             >
               🖌️
+              <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50">
+                Pick a color and repaint existing blocks
+              </span>
             </button>
             {isPaintMode && (
-              <input
-                type="color"
-                value={paintColor}
-                onChange={(e) => setPaintColor(e.target.value)}
-                className="w-8 h-8 rounded-lg border-2 border-slate-300 cursor-pointer p-0"
-                title="Pick color"
-              />
+              <div className="relative group">
+                <input
+                  type="color"
+                  value={paintColor}
+                  onChange={(e) => setPaintColor(e.target.value)}
+                  className="w-8 h-8 rounded-lg border-2 border-slate-300 cursor-pointer p-0"
+                  title="Pick color"
+                />
+                <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50">
+                  Choose the paint color
+                </span>
+              </div>
             )}
           </div>
           <button
             onClick={handleClearAll}
-            className="flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-red-300 hover:border-red-400 bg-white hover:bg-red-50 text-red-600 transition-all text-sm hover:shadow-sm"
+            className="relative group flex-shrink-0 w-8 h-8 flex items-center justify-center rounded-lg border border-red-300 hover:border-red-400 bg-white hover:bg-red-50 text-red-600 transition-all text-sm hover:shadow-sm"
             title="Clear all"
           >
             🗑️
+            <span className="absolute top-full left-1/2 -translate-x-1/2 mt-1 whitespace-nowrap bg-slate-900 text-white text-[10px] px-2 py-1 rounded shadow-lg opacity-0 group-hover:opacity-100 pointer-events-none z-50">
+              Clear all blocks from the calendar
+            </span>
           </button>
           <button
             onClick={handleSave}
