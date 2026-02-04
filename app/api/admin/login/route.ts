@@ -1,62 +1,38 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { comparePassword } from '@/lib/auth'
 import { createSession, COOKIE_NAME } from '@/lib/session'
+
+// Tim's password - required for admin login
+const TIM_PASSWORD = 'Hellomynameistim'
 
 export async function POST(request: NextRequest) {
   try {
-    const { email, password, autoLogin } = await request.json()
+    const { password } = await request.json()
 
-    let admin
-
-    // If autoLogin is true, just find the first admin
-    if (autoLogin) {
-      admin = await db.admin.findFirst()
-      
-      if (!admin) {
-        return NextResponse.json(
-          { error: 'No admin account found' },
-          { status: 404 }
-        )
-      }
-    } else {
-      // Normal login with credentials
-      // Validation
-      if (!email || !password) {
-        return NextResponse.json(
-          { error: 'Email and password are required' },
-          { status: 400 }
-        )
-      }
-
-      // Find admin
-      admin = await db.admin.findUnique({
-        where: { email },
-      })
-
-      if (!admin) {
-        return NextResponse.json(
-          { error: 'Invalid email or password' },
-          { status: 401 }
-        )
-      }
-
-      // Verify password
-      const isValid = await comparePassword(password, admin.passwordHash)
-      if (!isValid) {
-        return NextResponse.json(
-          { error: 'Invalid email or password' },
-          { status: 401 }
-        )
-      }
+    // Password is required
+    if (!password) {
+      return NextResponse.json(
+        { error: 'Password is required' },
+        { status: 400 }
+      )
     }
 
-    // If password field doesn't exist, update it
-    if (!admin.password) {
-      await db.admin.update({
-        where: { id: admin.id },
-        data: { password: password },
-      })
+    // Verify password
+    if (password !== TIM_PASSWORD) {
+      return NextResponse.json(
+        { error: 'Invalid password' },
+        { status: 401 }
+      )
+    }
+
+    // Find the admin (Tim)
+    const admin = await db.admin.findFirst()
+    
+    if (!admin) {
+      return NextResponse.json(
+        { error: 'No admin account found' },
+        { status: 404 }
+      )
     }
 
     // Create session in database

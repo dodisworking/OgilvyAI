@@ -8,6 +8,9 @@ import Button from '@/components/UI/Button'
 
 export default function Home() {
   const [isLogin, setIsLogin] = useState(true)
+  const [showTimLogin, setShowTimLogin] = useState(false)
+  const [timPassword, setTimPassword] = useState('')
+  const [timError, setTimError] = useState('')
   const [isLoadingTim, setIsLoadingTim] = useState(false)
   const router = useRouter()
 
@@ -30,6 +33,38 @@ export default function Home() {
     }
     checkAuth()
   }, [router])
+
+  const handleTimLogin = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setTimError('')
+    setIsLoadingTim(true)
+
+    try {
+      const response = await fetch('/api/admin/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        credentials: 'include',
+        body: JSON.stringify({
+          password: timPassword,
+        }),
+      })
+
+      if (response.ok) {
+        router.push('/admin')
+        router.refresh()
+      } else {
+        const data = await response.json()
+        setTimError(data.error || 'Invalid password')
+      }
+    } catch (error) {
+      console.error('Admin login error:', error)
+      setTimError('Failed to login. Please try again.')
+    } finally {
+      setIsLoadingTim(false)
+    }
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-purple-50 via-pink-50 to-blue-50 dark:from-gray-900 dark:via-purple-900 dark:to-gray-900 flex items-center justify-center p-4">
@@ -62,65 +97,67 @@ export default function Home() {
             <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
               <Button
                 variant="outline"
-                onClick={async () => {
-                  setIsLoadingTim(true)
-                  try {
-                    // Directly log in as admin without credentials
-                    const response = await fetch('/api/admin/login', {
-                      method: 'POST',
-                      headers: {
-                        'Content-Type': 'application/json',
-                      },
-                      credentials: 'include',
-                      body: JSON.stringify({
-                        autoLogin: true, // Flag to skip password check
-                      }),
-                    })
-
-                    if (response.ok) {
-                      // Small delay to show loading animation
-                      await new Promise(resolve => setTimeout(resolve, 500))
-                      router.push('/admin')
-                      router.refresh()
-                    } else {
-                      const data = await response.json()
-                      console.error('Admin login error:', data.error || 'Failed to log in')
-                      // Don't show alert - just redirect anyway
-                      await new Promise(resolve => setTimeout(resolve, 500))
-                      router.push('/admin')
-                      router.refresh()
-                    }
-                  } catch (error) {
-                    console.error('Admin login error:', error)
-                    // Don't show alert - just redirect anyway
-                    await new Promise(resolve => setTimeout(resolve, 500))
-                    router.push('/admin')
-                    router.refresh()
-                  } finally {
-                    setIsLoadingTim(false)
-                  }
-                }}
-                disabled={isLoadingTim}
+                onClick={() => setShowTimLogin(true)}
                 className="w-full text-sm"
               >
-                {isLoadingTim ? 'Loading Tim...' : 'Are you Tim?'}
+                Are you Tim?
               </Button>
             </div>
           </div>
         </div>
       </div>
 
-      {/* Loading Tim Overlay */}
-      {isLoadingTim && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl p-8 max-w-md w-full mx-4">
-            <div className="flex flex-col items-center">
-              <div className="animate-spin rounded-full h-16 w-16 border-b-4 border-purple-600 mb-4"></div>
-              <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">Loading Tim...</h3>
-              <p className="text-gray-600 dark:text-gray-400 text-center">
-                Please wait while we log you in as Tim
+      {/* Tim Login Modal */}
+      {showTimLogin && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-8 relative animate-in zoom-in duration-300">
+            <button
+              onClick={() => {
+                setShowTimLogin(false)
+                setTimPassword('')
+                setTimError('')
+              }}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl"
+            >
+              ×
+            </button>
+
+            <div className="text-center mb-6">
+              <div className="text-5xl mb-4">👑</div>
+              <h2 className="text-2xl font-bold bg-gradient-to-r from-yellow-500 to-orange-500 bg-clip-text text-transparent">
+                Tim Login
+              </h2>
+              <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">
+                Enter your password to access admin
               </p>
             </div>
+
+            <form onSubmit={handleTimLogin} className="space-y-4">
+              <div>
+                <input
+                  type="password"
+                  value={timPassword}
+                  onChange={(e) => setTimPassword(e.target.value)}
+                  placeholder="Enter password..."
+                  className="w-full px-4 py-3 rounded-lg border-2 border-yellow-200 focus:border-yellow-500 focus:outline-none transition-colors dark:bg-gray-700 dark:border-gray-600"
+                  autoFocus
+                />
+              </div>
+
+              {timError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">
+                  {timError}
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                isLoading={isLoadingTim}
+                className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600"
+              >
+                👑 Login as Tim
+              </Button>
+            </form>
           </div>
         </div>
       )}
