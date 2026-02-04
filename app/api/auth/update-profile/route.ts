@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromCookie } from '@/lib/session'
 import { db } from '@/lib/db'
+import { AccountType, Prisma } from '@prisma/client'
 
 export async function PUT(request: NextRequest) {
   try {
@@ -15,7 +16,7 @@ export async function PUT(request: NextRequest) {
     const { profilePicture, accountType } = body
 
     // Build update data - only include fields that were provided
-    const updateData: { profilePicture?: string | null; accountType?: string | null } = {}
+    const updateData: Prisma.UserUpdateInput = {}
     
     if (profilePicture !== undefined) {
       updateData.profilePicture = profilePicture
@@ -23,17 +24,26 @@ export async function PUT(request: NextRequest) {
     
     if (accountType !== undefined) {
       const normalizedRole =
-        typeof accountType === 'string' ? accountType.trim().toUpperCase() : undefined
-      const allowedRoles = ['PRODUCER', 'CREATIVE', 'CLIENT', 'OTHER']
+        typeof accountType === 'string' ? accountType.trim().toLowerCase() : ''
+      const roleMap: Record<string, AccountType> = {
+        producer: AccountType.PRODUCER,
+        creative: AccountType.CREATIVE,
+        account: AccountType.CLIENT,
+        client: AccountType.CLIENT,
+        other: AccountType.OTHER,
+      }
+      const mappedRole = roleMap[normalizedRole]
 
-      if (normalizedRole && !allowedRoles.includes(normalizedRole)) {
+      if (normalizedRole && !mappedRole) {
         return NextResponse.json(
           { error: 'Invalid account type' },
           { status: 400 }
         )
       }
 
-      updateData.accountType = normalizedRole || null
+      if (mappedRole) {
+        updateData.accountType = mappedRole
+      }
     }
 
     // Update user in database
