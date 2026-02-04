@@ -7,6 +7,7 @@ import InteractiveCalendar from '@/components/Dashboard/InteractiveCalendar'
 import RequestList from '@/components/Dashboard/RequestList'
 import ChangePasswordForm from '@/components/Dashboard/ChangePasswordForm'
 import ProfileSettings from '@/components/Dashboard/ProfileSettings'
+import ProfileSetupPrompt from '@/components/Dashboard/ProfileSetupPrompt'
 import IsaacMode from '@/components/Dashboard/IsaacMode'
 import DrowningCalendar from '@/components/Dashboard/DrowningCalendar'
 import DrowningRequestList from '@/components/Dashboard/DrowningRequestList'
@@ -29,6 +30,8 @@ export default function Dashboard() {
   const [showChangePassword, setShowChangePassword] = useState(false)
   const [showProfileSettings, setShowProfileSettings] = useState(false)
   const [showIsaacMode, setShowIsaacMode] = useState(false)
+  const [showProfileSetup, setShowProfileSetup] = useState(false)
+  const [profileSetupDismissed, setProfileSetupDismissed] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
@@ -79,6 +82,17 @@ export default function Dashboard() {
 
     checkAuth()
   }, [router])
+
+  useEffect(() => {
+    if (!user || profileSetupDismissed) return
+
+    const missingProfilePicture = !user.profilePicture
+    const missingRole = !user.accountType
+
+    if (missingProfilePicture || missingRole) {
+      setShowProfileSetup(true)
+    }
+  }, [user, profileSetupDismissed])
 
   const fetchRequests = async () => {
     try {
@@ -478,6 +492,24 @@ export default function Dashboard() {
           user={user}
           onClose={() => setShowProfileSettings(false)}
           onProfileUpdate={(updatedUser) => setUser(updatedUser)}
+        />
+      )}
+
+      {showProfileSetup && user && (
+        <ProfileSetupPrompt
+          userName={user.name || 'there'}
+          onComplete={(data) => {
+            setUser((prev: any) => ({
+              ...prev,
+              profilePicture: data.profilePicture,
+              accountType: data.accountType,
+            }))
+            setShowProfileSetup(false)
+          }}
+          onSkip={() => {
+            setProfileSetupDismissed(true)
+            setShowProfileSetup(false)
+          }}
         />
       )}
 
