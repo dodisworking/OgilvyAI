@@ -3,11 +3,18 @@
 import { useState, useMemo, useEffect } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, isToday } from 'date-fns'
 
+interface User {
+  id: string
+  name: string
+  email: string
+  profilePicture?: string | null
+}
+
 interface DrowningCalendarProps {
   userName?: string
   initialSelectedDays?: Set<string>
   initialNatureOfNeed?: string
-  onDatesSelected: (dates: { startDate: Date; endDate: Date; natureOfNeed?: string; dayBreakdown?: Record<string, boolean>; sendToAll?: boolean }) => void
+  onDatesSelected: (dates: { startDate: Date; endDate: Date; natureOfNeed?: string; dayBreakdown?: Record<string, boolean>; sendToAll?: boolean; selectedUserIds?: string[] }) => void
   onCancel: () => void
 }
 
@@ -18,8 +25,31 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
   const [showReview, setShowReview] = useState(false)
   const [natureOfNeed, setNatureOfNeed] = useState(initialNatureOfNeed || '')
   const [sendToAll, setSendToAll] = useState(false)
+  const [sendToSpecific, setSendToSpecific] = useState(false)
+  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set())
+  const [allUsers, setAllUsers] = useState<User[]>([])
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false)
   const [mouseDownDay, setMouseDownDay] = useState<Date | null>(null)
   const [hasMouseMoved, setHasMouseMoved] = useState(false)
+
+  // Fetch all users when component mounts
+  useEffect(() => {
+    const fetchUsers = async () => {
+      setIsLoadingUsers(true)
+      try {
+        const response = await fetch('/api/drowning/users')
+        if (response.ok) {
+          const data = await response.json()
+          setAllUsers(data.users)
+        }
+      } catch (error) {
+        console.error('Failed to fetch users:', error)
+      } finally {
+        setIsLoadingUsers(false)
+      }
+    }
+    fetchUsers()
+  }, [])
 
   useEffect(() => {
     setSelectedDays(initialSelectedDays || new Set())
@@ -133,7 +163,26 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
       natureOfNeed: natureOfNeed || undefined,
       dayBreakdown,
       sendToAll,
+      selectedUserIds: sendToSpecific ? Array.from(selectedUsers) : undefined,
     })
+  }
+
+  const toggleUserSelection = (userId: string) => {
+    const newSelected = new Set(selectedUsers)
+    if (newSelected.has(userId)) {
+      newSelected.delete(userId)
+    } else {
+      newSelected.add(userId)
+    }
+    setSelectedUsers(newSelected)
+  }
+
+  const selectAllUsers = () => {
+    setSelectedUsers(new Set(allUsers.map(u => u.id)))
+  }
+
+  const clearUserSelection = () => {
+    setSelectedUsers(new Set())
   }
 
   const clearSelection = () => {
@@ -214,24 +263,180 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
             />
           </div>
 
-          {/* Send to Whole Department Option */}
-          <div className="mb-6 p-4 bg-blue-50 dark:bg-blue-900/20 rounded-lg border-2 border-blue-200 dark:border-blue-700">
-            <label className="flex items-center cursor-pointer">
-              <input
-                type="checkbox"
-                checked={sendToAll}
-                onChange={(e) => setSendToAll(e.target.checked)}
-                className="mr-3 h-5 w-5 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
-              />
-              <div>
-                <p className="font-semibold text-blue-800 dark:text-blue-200 text-sm">
-                  📧 Send SOS Email to Whole Department
-                </p>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
-                  Notify everyone about your rescue mission! They&apos;ll get a fun email asking if they&apos;re up for the task.
-                </p>
+          {/* Notification Options */}
+          <div className="mb-6 space-y-3">
+            <p className="font-semibold text-gray-700 dark:text-gray-300 text-sm">Who should receive your SOS?</p>
+            
+            {/* Send to Whole Department Option */}
+            <div className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+              sendToAll 
+                ? 'bg-blue-100 dark:bg-blue-900/40 border-blue-500' 
+                : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-blue-300'
+            }`}
+              onClick={() => {
+                setSendToAll(true)
+                setSendToSpecific(false)
+              }}
+            >
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="sendOption"
+                  checked={sendToAll}
+                  onChange={() => {
+                    setSendToAll(true)
+                    setSendToSpecific(false)
+                  }}
+                  className="mr-3 h-5 w-5 text-blue-600 focus:ring-blue-500"
+                />
+                <div>
+                  <p className="font-semibold text-blue-800 dark:text-blue-200 text-sm">
+                    📢 Send to Whole Department
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Notify everyone about your rescue mission!
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* Send to Specific People Option */}
+            <div className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+              sendToSpecific 
+                ? 'bg-blue-100 dark:bg-blue-900/40 border-blue-500' 
+                : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-blue-300'
+            }`}
+              onClick={() => {
+                setSendToSpecific(true)
+                setSendToAll(false)
+              }}
+            >
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="sendOption"
+                  checked={sendToSpecific}
+                  onChange={() => {
+                    setSendToSpecific(true)
+                    setSendToAll(false)
+                  }}
+                  className="mr-3 h-5 w-5 text-blue-600 focus:ring-blue-500"
+                />
+                <div>
+                  <p className="font-semibold text-blue-800 dark:text-blue-200 text-sm">
+                    👥 Send to Specific People
+                  </p>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mt-1">
+                    Choose who you want to ask for help
+                  </p>
+                </div>
+              </label>
+            </div>
+
+            {/* User Selection List */}
+            {sendToSpecific && (
+              <div className="mt-3 p-4 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700">
+                <div className="flex justify-between items-center mb-3">
+                  <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                    Select team members ({selectedUsers.size} selected)
+                  </p>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={selectAllUsers}
+                      className="text-xs text-blue-600 hover:text-blue-800 dark:text-blue-400"
+                    >
+                      Select All
+                    </button>
+                    <span className="text-gray-300">|</span>
+                    <button
+                      onClick={clearUserSelection}
+                      className="text-xs text-gray-500 hover:text-gray-700 dark:text-gray-400"
+                    >
+                      Clear
+                    </button>
+                  </div>
+                </div>
+                
+                {isLoadingUsers ? (
+                  <div className="flex justify-center py-4">
+                    <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-500"></div>
+                  </div>
+                ) : (
+                  <div className="max-h-48 overflow-y-auto space-y-2">
+                    {allUsers.map(user => (
+                      <label
+                        key={user.id}
+                        className={`flex items-center gap-3 p-2 rounded-lg cursor-pointer transition-colors ${
+                          selectedUsers.has(user.id)
+                            ? 'bg-blue-50 dark:bg-blue-900/30'
+                            : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedUsers.has(user.id)}
+                          onChange={() => toggleUserSelection(user.id)}
+                          className="h-4 w-4 text-blue-600 focus:ring-blue-500 rounded"
+                        />
+                        {user.profilePicture ? (
+                          <img
+                            src={user.profilePicture}
+                            alt={user.name}
+                            className="w-8 h-8 rounded-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-8 h-8 rounded-full bg-gradient-to-r from-blue-400 to-cyan-400 flex items-center justify-center text-white text-sm font-bold">
+                            {user.name[0]?.toUpperCase()}
+                          </div>
+                        )}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-gray-800 dark:text-white truncate">
+                            {user.name}
+                          </p>
+                          <p className="text-xs text-gray-500 truncate">{user.email}</p>
+                        </div>
+                      </label>
+                    ))}
+                    {allUsers.length === 0 && (
+                      <p className="text-center text-gray-500 text-sm py-4">No users found</p>
+                    )}
+                  </div>
+                )}
               </div>
-            </label>
+            )}
+
+            {/* No notification option */}
+            <div className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
+              !sendToAll && !sendToSpecific 
+                ? 'bg-gray-100 dark:bg-gray-700 border-gray-400' 
+                : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300'
+            }`}
+              onClick={() => {
+                setSendToAll(false)
+                setSendToSpecific(false)
+              }}
+            >
+              <label className="flex items-center cursor-pointer">
+                <input
+                  type="radio"
+                  name="sendOption"
+                  checked={!sendToAll && !sendToSpecific}
+                  onChange={() => {
+                    setSendToAll(false)
+                    setSendToSpecific(false)
+                  }}
+                  className="mr-3 h-5 w-5 text-gray-600 focus:ring-gray-500"
+                />
+                <div>
+                  <p className="font-semibold text-gray-700 dark:text-gray-300 text-sm">
+                    🔕 Don&apos;t send notifications
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                    Just log the request without emailing anyone
+                  </p>
+                </div>
+              </label>
+            </div>
           </div>
 
           <div className="flex gap-4">
