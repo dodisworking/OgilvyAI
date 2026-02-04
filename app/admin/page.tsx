@@ -34,8 +34,7 @@ export default function AdminPage() {
   const [showSuccess, setShowSuccess] = useState(false)
   
   // Tim Mode states
-  const [timModeOpen, setTimModeOpen] = useState(false)
-  const [showTimModePanel, setShowTimModePanel] = useState(false)
+  const [timModeActive, setTimModeActive] = useState(false)
   const [timModeView, setTimModeView] = useState<'requests' | 'calendar' | 'drowning' | null>(null)
   
   const router = useRouter()
@@ -189,72 +188,20 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="flex gap-3">
-            {/* Tim Mode Button */}
-            <div className="relative">
-              <button
-                onClick={() => setTimModeOpen(!timModeOpen)}
-                className={`px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg ${
-                  showTimModePanel
-                    ? 'bg-gradient-to-r from-yellow-500 to-orange-500 text-white'
-                    : 'bg-gradient-to-r from-yellow-400 to-orange-400 text-white hover:from-yellow-500 hover:to-orange-500'
-                }`}
-              >
-                👑 Go Tim Mode
-              </button>
-              
-              {/* Tim Mode Dropdown */}
-              {timModeOpen && (
-                <div className="absolute right-0 top-full mt-2 w-72 bg-white dark:bg-gray-800 rounded-xl shadow-2xl border border-gray-200 dark:border-gray-700 overflow-hidden z-50">
-                  <div className="p-3 bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 border-b border-gray-200 dark:border-gray-700">
-                    <p className="text-sm font-medium text-gray-700 dark:text-gray-300">👑 Admin Superpowers</p>
-                  </div>
-                  <div className="p-2">
-                    <button
-                      onClick={() => {
-                        setTimModeView('calendar')
-                        setShowTimModePanel(true)
-                        setTimModeOpen(false)
-                      }}
-                      className="w-full text-left px-4 py-3 rounded-lg transition-colors flex items-center gap-3 hover:bg-purple-50 dark:hover:bg-gray-700"
-                    >
-                      <span className="text-2xl">📅</span>
-                      <div>
-                        <div className="font-medium text-gray-800 dark:text-white">Master Calendar</div>
-                        <div className="text-xs text-gray-500">See who&apos;s out & coverage gaps</div>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setTimModeView('requests')
-                        setShowTimModePanel(true)
-                        setTimModeOpen(false)
-                      }}
-                      className="w-full text-left px-4 py-3 rounded-lg transition-colors flex items-center gap-3 hover:bg-purple-50 dark:hover:bg-gray-700"
-                    >
-                      <span className="text-2xl">📋</span>
-                      <div>
-                        <div className="font-medium text-gray-800 dark:text-white">View All Requests</div>
-                        <div className="text-xs text-gray-500">Pending, approved & rejected</div>
-                      </div>
-                    </button>
-                    <button
-                      onClick={() => {
-                        setTimModeView('drowning')
-                        setShowTimModePanel(true)
-                        setTimModeOpen(false)
-                      }}
-                      className="w-full text-left px-4 py-3 rounded-lg transition-colors flex items-center gap-3 hover:bg-purple-50 dark:hover:bg-gray-700"
-                    >
-                      <span className="text-2xl">🆘</span>
-                      <div>
-                        <div className="font-medium text-gray-800 dark:text-white">Drowning Requests</div>
-                        <div className="text-xs text-gray-500">Team members needing help</div>
-                      </div>
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
+            {/* Tim Mode Toggle Button */}
+            <button
+              onClick={() => {
+                setTimModeActive(!timModeActive)
+                setTimModeView(null)
+              }}
+              className={`px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg ${
+                timModeActive
+                  ? 'bg-gradient-to-r from-purple-600 to-pink-600 text-white'
+                  : 'bg-gradient-to-r from-yellow-400 to-orange-400 text-white hover:from-yellow-500 hover:to-orange-500'
+              }`}
+            >
+              {timModeActive ? '← Back to Apps' : '👑 Go Tim Mode'}
+            </button>
             <Button variant="outline" onClick={() => setShowChangePassword(true)}>
               Change Password
             </Button>
@@ -264,12 +211,12 @@ export default function AdminPage() {
           </div>
         </div>
 
-        {/* Pending Requests Badge (always visible) */}
-        {allRequests.filter(r => r.status === 'PENDING').length > 0 && (
+        {/* Pending Requests Badge (only when not in Tim Mode) */}
+        {!timModeActive && allRequests.filter(r => r.status === 'PENDING').length > 0 && (
           <div 
             onClick={() => {
+              setTimModeActive(true)
               setTimModeView('requests')
-              setShowTimModePanel(true)
             }}
             className="mb-6 p-4 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-xl cursor-pointer hover:bg-yellow-100 dark:hover:bg-yellow-900/30 transition-colors"
           >
@@ -285,37 +232,83 @@ export default function AdminPage() {
           </div>
         )}
 
-        {/* Tim Mode Panel */}
-        {showTimModePanel && (
+        {/* Tim Mode Panel - Admin Features */}
+        {timModeActive && (
           <div className="mb-8">
-            <div className="flex items-center justify-between mb-4">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">👑</span>
-                <h2 className="text-2xl font-bold text-gray-800 dark:text-white">
-                  {timModeView === 'calendar' && 'Master Calendar'}
-                  {timModeView === 'requests' && 'All Requests'}
-                  {timModeView === 'drowning' && 'Drowning Requests'}
-                </h2>
+            {/* Admin Feature Cards */}
+            {!timModeView && (
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {/* Master Calendar Card */}
+                <div
+                  onClick={() => setTimModeView('calendar')}
+                  className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg cursor-pointer hover:shadow-xl hover:scale-[1.02] transition-all border-2 border-transparent hover:border-purple-300 dark:hover:border-purple-700"
+                >
+                  <div className="text-5xl mb-4">📅</div>
+                  <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Master Calendar</h3>
+                  <p className="text-gray-500 dark:text-gray-400">See who&apos;s out and identify coverage gaps across the team</p>
+                </div>
+
+                {/* View Requests Card */}
+                <div
+                  onClick={() => setTimModeView('requests')}
+                  className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg cursor-pointer hover:shadow-xl hover:scale-[1.02] transition-all border-2 border-transparent hover:border-purple-300 dark:hover:border-purple-700 relative"
+                >
+                  {allRequests.filter(r => r.status === 'PENDING').length > 0 && (
+                    <div className="absolute top-4 right-4 bg-red-500 text-white text-sm font-bold px-3 py-1 rounded-full">
+                      {allRequests.filter(r => r.status === 'PENDING').length}
+                    </div>
+                  )}
+                  <div className="text-5xl mb-4">📋</div>
+                  <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">View All Requests</h3>
+                  <p className="text-gray-500 dark:text-gray-400">Review pending, approved, and rejected time off requests</p>
+                </div>
+
+                {/* Drowning Requests Card */}
+                <div
+                  onClick={() => setTimModeView('drowning')}
+                  className="bg-white dark:bg-gray-800 rounded-2xl p-8 shadow-lg cursor-pointer hover:shadow-xl hover:scale-[1.02] transition-all border-2 border-transparent hover:border-purple-300 dark:hover:border-purple-700"
+                >
+                  <div className="text-5xl mb-4">🆘</div>
+                  <h3 className="text-xl font-bold text-gray-800 dark:text-white mb-2">Drowning Requests</h3>
+                  <p className="text-gray-500 dark:text-gray-400">See team members who need help and manage rescue requests</p>
+                </div>
               </div>
-              <button
-                onClick={() => {
-                  setShowTimModePanel(false)
-                  setTimModeView(null)
-                }}
-                className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-700 dark:text-gray-300"
-              >
-                ← Back to Apps
-              </button>
-            </div>
-            
-            {timModeView === 'calendar' && <MasterCalendar />}
-            {timModeView === 'requests' && <AdminDashboard requests={allRequests} onRefresh={fetchAllRequests} />}
-            {timModeView === 'drowning' && <DrowningAdmin />}
+            )}
+
+            {/* Specific View Content */}
+            {timModeView && (
+              <div>
+                <div className="flex items-center justify-between mb-4">
+                  <div className="flex items-center gap-3">
+                    <span className="text-2xl">
+                      {timModeView === 'calendar' && '📅'}
+                      {timModeView === 'requests' && '📋'}
+                      {timModeView === 'drowning' && '🆘'}
+                    </span>
+                    <h2 className="text-2xl font-bold text-gray-800 dark:text-white">
+                      {timModeView === 'calendar' && 'Master Calendar'}
+                      {timModeView === 'requests' && 'All Requests'}
+                      {timModeView === 'drowning' && 'Drowning Requests'}
+                    </h2>
+                  </div>
+                  <button
+                    onClick={() => setTimModeView(null)}
+                    className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors text-gray-700 dark:text-gray-300"
+                  >
+                    ← Back to Admin Menu
+                  </button>
+                </div>
+                
+                {timModeView === 'calendar' && <MasterCalendar />}
+                {timModeView === 'requests' && <AdminDashboard requests={allRequests} onRefresh={fetchAllRequests} />}
+                {timModeView === 'drowning' && <DrowningAdmin />}
+              </div>
+            )}
           </div>
         )}
 
-        {/* App Bubbles Grid (always visible unless in Tim Mode panel) */}
-        {!showTimModePanel && (
+        {/* App Bubbles Grid (hidden when in Tim Mode) */}
+        {!timModeActive && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12 grid-auto-rows-[minmax(200px,200px)]">
             {/* Time Off / WFH */}
             <div className="relative group h-full min-h-[200px] flex w-full">
@@ -501,14 +494,6 @@ export default function AdminPage() {
           </div>
         )}
       </div>
-
-      {/* Click outside to close Tim Mode dropdown */}
-      {timModeOpen && (
-        <div 
-          className="fixed inset-0 z-40" 
-          onClick={() => setTimModeOpen(false)}
-        />
-      )}
 
       {showChangePassword && (
         <ChangePasswordForm onClose={() => setShowChangePassword(false)} />
