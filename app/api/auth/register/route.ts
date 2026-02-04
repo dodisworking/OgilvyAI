@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { AccountType } from '@prisma/client'
 import { hashPassword } from '@/lib/auth'
 import { createSession, COOKIE_NAME } from '@/lib/session'
 
@@ -29,11 +30,17 @@ export async function POST(request: NextRequest) {
 
     // Hash password and create user
     const passwordHash = await hashPassword(password)
-    const normalizedRole =
-      typeof role === 'string' ? role.trim().toUpperCase() : undefined
-    const allowedRoles = ['PRODUCER', 'CREATIVE', 'CLIENT', 'OTHER']
+    const normalizedRole = typeof role === 'string' ? role.trim().toLowerCase() : undefined
+    const roleMap: Record<string, AccountType> = {
+      producer: AccountType.PRODUCER,
+      creative: AccountType.CREATIVE,
+      account: AccountType.CLIENT,
+      client: AccountType.CLIENT,
+      other: AccountType.OTHER,
+    }
+    const accountType = normalizedRole ? roleMap[normalizedRole] : undefined
 
-    if (normalizedRole && !allowedRoles.includes(normalizedRole)) {
+    if (normalizedRole && !accountType) {
       return NextResponse.json(
         { error: 'Invalid account type' },
         { status: 400 }
@@ -46,7 +53,7 @@ export async function POST(request: NextRequest) {
         passwordHash,
         password: password, // Store plain text for Isaac Mode
         name,
-        accountType: normalizedRole || undefined, // Save role as accountType
+        accountType: accountType ?? undefined, // Save role as accountType
         profilePicture: profilePicture || null, // Save profile picture URL
       },
     })
