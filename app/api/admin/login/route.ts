@@ -23,9 +23,14 @@ const PORTAL_PROFILE: Record<AdminPortal, { name: string; email: string; passwor
   },
 }
 
+function isAdminPortal(value: unknown): value is AdminPortal {
+  return value === 'tim' || value === 'jess'
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const { password, portal } = await request.json()
+    const body: { password?: string; portal?: unknown } = await request.json()
+    const { password, portal } = body
 
     // Password is required
     if (!password) {
@@ -37,9 +42,9 @@ export async function POST(request: NextRequest) {
 
     let selectedPortal: AdminPortal | null = null
 
-    if (portal === 'tim' || portal === 'jess') {
+    if (isAdminPortal(portal)) {
       selectedPortal = portal
-      if (password !== PORTAL_PROFILE[selectedPortal].password) {
+      if (password !== PORTAL_PROFILE[portal].password) {
         return NextResponse.json(
           { error: 'Invalid password' },
           { status: 401 }
@@ -53,6 +58,13 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         { error: 'Invalid password' },
         { status: 401 }
+      )
+    }
+
+    if (!selectedPortal) {
+      return NextResponse.json(
+        { error: 'Invalid portal selection' },
+        { status: 400 }
       )
     }
 
