@@ -1,26 +1,34 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, lazy, Suspense } from 'react'
 import { useRouter } from 'next/navigation'
+import dynamic from 'next/dynamic'
 import MenuBubble from '@/components/Dashboard/MenuBubble'
-import InteractiveCalendar from '@/components/Dashboard/InteractiveCalendar'
-import RequestList from '@/components/Dashboard/RequestList'
-import ChangePasswordForm from '@/components/Dashboard/ChangePasswordForm'
-import ProfileSettings from '@/components/Dashboard/ProfileSettings'
-import DrowningCalendar from '@/components/Dashboard/DrowningCalendar'
-import DrowningRequestList from '@/components/Dashboard/DrowningRequestList'
-import VirtualOffice from '@/components/VirtualOffice/VirtualOffice'
-import ProductionScheduleMaker from '@/components/Dashboard/ProductionScheduleMaker'
-import BoardomagicMain from '@/components/Dashboard/Boardomagic/BoardomagicMain'
-import AdminDashboard from '@/components/Admin/AdminDashboard'
-import DrowningAdmin from '@/components/Admin/DrowningAdmin'
-import MasterCalendar from '@/components/Admin/MasterCalendar'
 import Button from '@/components/UI/Button'
 import { Request } from '@/types'
 
+// Lazy load heavy components - only load when needed
+const InteractiveCalendar = dynamic(() => import('@/components/Dashboard/InteractiveCalendar'), { 
+  loading: () => <div className="flex justify-center py-8"><div className="animate-spin h-8 w-8 border-2 border-purple-600 border-t-transparent rounded-full"></div></div>,
+  ssr: false 
+})
+const RequestList = dynamic(() => import('@/components/Dashboard/RequestList'), { ssr: false })
+const ChangePasswordForm = dynamic(() => import('@/components/Dashboard/ChangePasswordForm'), { ssr: false })
+const ProfileSettings = dynamic(() => import('@/components/Dashboard/ProfileSettings'), { ssr: false })
+const DrowningCalendar = dynamic(() => import('@/components/Dashboard/DrowningCalendar'), { ssr: false })
+const DrowningRequestList = dynamic(() => import('@/components/Dashboard/DrowningRequestList'), { ssr: false })
+const VirtualOffice = dynamic(() => import('@/components/VirtualOffice/VirtualOffice'), { ssr: false })
+const ProductionScheduleMaker = dynamic(() => import('@/components/Dashboard/ProductionScheduleMaker'), { 
+  loading: () => <div className="flex justify-center py-8"><div className="animate-spin h-8 w-8 border-2 border-purple-600 border-t-transparent rounded-full"></div></div>,
+  ssr: false 
+})
+const BoardomagicMain = dynamic(() => import('@/components/Dashboard/Boardomagic/BoardomagicMain'), { ssr: false })
+const AdminDashboard = dynamic(() => import('@/components/Admin/AdminDashboard'), { ssr: false })
+const DrowningAdmin = dynamic(() => import('@/components/Admin/DrowningAdmin'), { ssr: false })
+const MasterCalendar = dynamic(() => import('@/components/Admin/MasterCalendar'), { ssr: false })
+
 export default function AdminPage() {
   const [admin, setAdmin] = useState<any>(null)
-  const [requests, setRequests] = useState<Request[]>([])
   const [allRequests, setAllRequests] = useState<Request[]>([])
   const [showCalendar, setShowCalendar] = useState(false)
   const [showRequests, setShowRequests] = useState(false)
@@ -34,12 +42,18 @@ export default function AdminPage() {
   const [isLoading, setIsLoading] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [showSuccess, setShowSuccess] = useState(false)
+  const [showNotificationSettings, setShowNotificationSettings] = useState(false)
+  const [remindersEnabled, setRemindersEnabled] = useState(true)
+  const [reminderEveryDays, setReminderEveryDays] = useState(2)
+  const [isSavingNotificationSettings, setIsSavingNotificationSettings] = useState(false)
   
   // Tim Mode states
   const [timModeActive, setTimModeActive] = useState(false)
   const [timModeView, setTimModeView] = useState<'requests' | 'calendar' | 'drowning' | null>(null)
   
   const router = useRouter()
+  const adminDisplayName = admin?.name || 'Tim'
+  const modeLabel = `${adminDisplayName} Mode`
 
   useEffect(() => {
     const checkAuth = async () => {
@@ -57,7 +71,7 @@ export default function AdminPage() {
         }
 
         setAdmin(userData.user)
-        await fetchRequests()
+        // Single fetch for all requests - used for both user's list and admin view
         await fetchAllRequests()
       } catch (error) {
         console.error('Failed to check auth:', error)
@@ -70,17 +84,23 @@ export default function AdminPage() {
     checkAuth()
   }, [router])
 
-  const fetchRequests = async () => {
-    try {
-      const response = await fetch('/api/requests', { credentials: 'include' })
-      if (response.ok) {
+  useEffect(() => {
+    const loadReminderSettings = async () => {
+      try {
+        const response = await fetch('/api/admin/notification-settings', { credentials: 'include' })
+        if (!response.ok) return
         const data = await response.json()
-        setRequests(data.requests)
+        if (data?.settings) {
+          setRemindersEnabled(Boolean(data.settings.remindersEnabled))
+          setReminderEveryDays(Number(data.settings.reminderEveryDays) || 2)
+        }
+      } catch (error) {
+        console.error('Failed to load reminder settings:', error)
       }
-    } catch (error) {
-      console.error('Failed to fetch requests:', error)
     }
-  }
+
+    loadReminderSettings()
+  }, [])
 
   const fetchAllRequests = async () => {
     try {
@@ -102,6 +122,35 @@ export default function AdminPage() {
     }
     router.push('/')
     router.refresh()
+  }
+
+  const handleSaveNotificationSettings = async () => {
+    setIsSavingNotificationSettings(true)
+    try {
+      const response = await fetch('/api/admin/notification-settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          remindersEnabled,
+          reminderEveryDays,
+          reminderHour: 10,
+          timezone: 'America/New_York',
+        }),
+      })
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}))
+        throw new Error(errorData.error || 'Failed to save settings')
+      }
+
+      setShowNotificationSettings(false)
+    } catch (error) {
+      console.error('Failed to save reminder settings:', error)
+      alert('Failed to save notification settings')
+    } finally {
+      setIsSavingNotificationSettings(false)
+    }
   }
 
   const handleDatesSelected = async (dateRanges: {
@@ -138,7 +187,7 @@ export default function AdminPage() {
         throw new Error('Failed to submit some requests')
       }
 
-      await fetchRequests()
+      await fetchAllRequests()
       setShowSuccess(true)
       setTimeout(() => setShowSuccess(false), 3000)
       setShowCalendar(false)
@@ -192,7 +241,7 @@ export default function AdminPage() {
             </div>
             <div>
               <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
-                Welcome back, {admin?.name || 'Tim'}!
+                Welcome back, {adminDisplayName}!
               </h1>
               <p className="text-gray-600 dark:text-gray-300 mt-2">
                 welcome to isaacs ai mind that hopefully will make your life easier
@@ -200,6 +249,14 @@ export default function AdminPage() {
             </div>
           </div>
           <div className="flex gap-3">
+            {timModeActive && (
+              <button
+                onClick={() => setShowNotificationSettings(true)}
+                className="px-4 py-2.5 rounded-lg font-medium transition-all shadow-lg bg-white dark:bg-gray-800 border border-purple-300 dark:border-purple-700 text-purple-700 dark:text-purple-300 hover:bg-purple-50 dark:hover:bg-purple-900/30"
+              >
+                🔔 Notification Settings
+              </button>
+            )}
             {/* Tim Mode Toggle Button */}
             <button
               onClick={() => {
@@ -212,7 +269,7 @@ export default function AdminPage() {
                   : 'bg-gradient-to-r from-yellow-400 to-orange-400 text-white hover:from-yellow-500 hover:to-orange-500'
               }`}
             >
-              {timModeActive ? '← Back to Apps' : '👑 Go Tim Mode'}
+              {timModeActive ? '← Back to Apps' : `👑 Go ${modeLabel}`}
             </button>
             <Button variant="outline" onClick={handleLogout}>
               Sign Out
@@ -308,7 +365,15 @@ export default function AdminPage() {
                   </button>
                 </div>
                 
-                {timModeView === 'calendar' && <MasterCalendar />}
+                {timModeView === 'calendar' && (
+                  <MasterCalendar
+                    requestsData={allRequests}
+                    showEditButton={true}
+                    allowPendingApproval={true}
+                    updateEndpoint="/api/admin/requests"
+                    onRequestUpdated={fetchAllRequests}
+                  />
+                )}
                 {timModeView === 'requests' && <AdminDashboard requests={allRequests} onRefresh={fetchAllRequests} />}
                 {timModeView === 'drowning' && <DrowningAdmin />}
               </div>
@@ -534,11 +599,15 @@ export default function AdminPage() {
 
       {/* Review Submissions Modal */}
       {showRequests && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto animate-in fade-in duration-300">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full p-8 relative my-8 animate-in zoom-in duration-300">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-4xl w-full max-h-[90vh] flex flex-col relative">
             <button onClick={() => setShowRequests(false)} className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl z-10">×</button>
-            <h2 className="text-2xl font-bold mb-6">Your Requests</h2>
-            <RequestList requests={requests} onUpdate={fetchRequests} />
+            <div className="p-8 pb-4 flex-shrink-0">
+              <h2 className="text-2xl font-bold">Your Requests</h2>
+            </div>
+            <div className="flex-1 overflow-y-auto px-8 pb-8 min-h-0">
+              <RequestList requests={allRequests} onUpdate={fetchAllRequests} />
+            </div>
           </div>
         </div>
       )}
@@ -660,6 +729,70 @@ export default function AdminPage() {
                 className="px-6 py-2 bg-gradient-to-r from-purple-600 to-pink-600 text-white rounded-lg hover:from-purple-700 hover:to-pink-700 transition-all font-medium"
               >
                 Got it!
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Notification Settings Modal */}
+      {showNotificationSettings && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 animate-in fade-in duration-300">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6 relative animate-in zoom-in duration-300">
+            <button
+              onClick={() => setShowNotificationSettings(false)}
+              className="absolute top-3 right-3 text-gray-400 hover:text-gray-600 text-2xl"
+            >
+              ×
+            </button>
+            <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100 mb-2">🔔 Notification Settings</h3>
+            <p className="text-sm text-gray-600 dark:text-gray-400 mb-5">
+              Configure reminder cadence for pending approval requests.
+            </p>
+
+            <div className="space-y-4">
+              <label className="flex items-center justify-between gap-3">
+                <span className="text-sm font-medium text-gray-800 dark:text-gray-200">Enable pending request reminders</span>
+                <input
+                  type="checkbox"
+                  checked={remindersEnabled}
+                  onChange={(e) => setRemindersEnabled(e.target.checked)}
+                  className="h-4 w-4 accent-purple-600"
+                />
+              </label>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">
+                  Send reminder every X day(s)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  max={30}
+                  value={reminderEveryDays}
+                  onChange={(e) => setReminderEveryDays(Math.max(1, Math.min(30, Number(e.target.value) || 1)))}
+                  disabled={!remindersEnabled}
+                  className="w-full px-3 py-2 rounded-lg border-2 border-purple-200 dark:border-purple-700 focus:border-purple-500 focus:outline-none disabled:opacity-50 dark:bg-gray-700"
+                />
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+                  Reminder send time is fixed at <strong>10:00 AM</strong>.
+                </p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex justify-end gap-3">
+              <button
+                onClick={() => setShowNotificationSettings(false)}
+                className="px-4 py-2 rounded-lg bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveNotificationSettings}
+                disabled={isSavingNotificationSettings}
+                className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white hover:from-purple-700 hover:to-pink-700 transition-all disabled:opacity-60"
+              >
+                {isSavingNotificationSettings ? 'Saving...' : 'Save Settings'}
               </button>
             </div>
           </div>

@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   try {
     const { password } = await request.json()
 
-    const expected = process.env.ISAAC_MODE_PASSWORD ?? 'Igomoonnasa'
+    const expected = process.env.ISAAC_MODE_PASSWORD ?? '123'
     if (!password || password !== expected) {
       return NextResponse.json(
         { error: 'Invalid password' },

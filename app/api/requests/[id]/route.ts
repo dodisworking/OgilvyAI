@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSessionFromCookie } from '@/lib/session'
-import { sendRequestNotificationToAdmin } from '@/lib/email'
+import { sendRequestSubmissionNotifications } from '@/lib/email'
 
 // DELETE request
 export async function DELETE(
@@ -118,12 +118,23 @@ export async function PUT(
       )
     }
 
+    // Parse date with noon time to prevent timezone shifting
+    const parseDate = (dateStr: string) => {
+      if (typeof dateStr === 'string' && dateStr.length === 10) {
+        return new Date(dateStr + 'T12:00:00')
+      }
+      return new Date(dateStr)
+    }
+
     // Update the request and set status back to PENDING (resubmit for review)
+    const parsedStartDate = parseDate(startDate)
+    const parsedEndDate = parseDate(endDate)
+
     const updatedRequest = await db.request.update({
       where: { id: requestId },
       data: {
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
+        startDate: parsedStartDate,
+        endDate: parsedEndDate,
         requestType,
         title: title || null,
         reason: reason || null,
@@ -140,19 +151,25 @@ export async function PUT(
       },
     })
 
-    // Send email notification to admin about the updated/resubmitted request
+    // Send resubmission confirmation to employee + notification to Tim and Isaac
     try {
-      await sendRequestNotificationToAdmin({
+      const host = request.headers.get('host') || 'localhost:3000'
+      const protocol = request.headers.get('x-forwarded-proto') || 'http'
+      const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `${protocol}://${host}`
+
+      await sendRequestSubmissionNotifications({
         employeeName: existingRequest.user.name,
         employeeEmail: existingRequest.user.email,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
+        startDate: parsedStartDate,
+        endDate: parsedEndDate,
         requestType,
         title: title || undefined,
         reason: reason || undefined,
+        requestId: updatedRequest.id,
+        baseUrl,
       })
     } catch (emailError) {
-      console.error('Failed to send email notification:', emailError)
+      console.error('Failed to send resubmission emails:', emailError)
       // Don't fail the request if email fails
     }
 

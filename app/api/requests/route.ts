@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSessionFromCookie } from '@/lib/session'
-import { sendRequestNotificationToAdmin } from '@/lib/email'
+import { sendRequestSubmissionNotifications } from '@/lib/email'
 
 // GET all requests (for admin or user's own requests)
 export async function GET(request: NextRequest) {
@@ -91,11 +91,22 @@ export async function POST(request: NextRequest) {
       ? dayBreakdown 
       : null
     
+    // Parse date with noon time to prevent timezone shifting
+    const parseDate = (dateStr: string) => {
+      if (typeof dateStr === 'string' && dateStr.length === 10) {
+        return new Date(dateStr + 'T12:00:00')
+      }
+      return new Date(dateStr)
+    }
+    
+    const parsedStartDate = parseDate(startDate)
+    const parsedEndDate = parseDate(endDate)
+
     const newRequest = await db.request.create({
       data: {
         userId: session.userId,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
+        startDate: parsedStartDate,
+        endDate: parsedEndDate,
         requestType,
         title: title || null,
         reason: reason || null,
@@ -113,18 +124,18 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Send email notification to admin
+    // Send submission confirmation to employee + notification to Tim and Isaac
     try {
       // Get base URL from request headers or environment
       const host = request.headers.get('host') || 'localhost:3000'
       const protocol = request.headers.get('x-forwarded-proto') || 'http'
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || `${protocol}://${host}`
       
-      await sendRequestNotificationToAdmin({
+      await sendRequestSubmissionNotifications({
         employeeName: user.name,
         employeeEmail: user.email,
-        startDate: new Date(startDate),
-        endDate: new Date(endDate),
+        startDate: parsedStartDate,
+        endDate: parsedEndDate,
         requestType,
         title: title || undefined,
         reason: reason || undefined,
@@ -132,7 +143,7 @@ export async function POST(request: NextRequest) {
         baseUrl,
       })
     } catch (emailError: any) {
-      console.error('Failed to send email notification:', emailError)
+      console.error('Failed to send submission emails:', emailError)
       // Don't fail the request if email fails
     }
 

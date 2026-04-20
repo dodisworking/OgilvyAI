@@ -5,7 +5,7 @@ const ISAAC_UNLOCK_COOKIE = 'isaac_mode_unlock'
 
 export async function GET(request: NextRequest) {
   try {
-    // Isaac Mode - requires unlock password (Igomoonnasa) via cookie
+    // Isaac Mode - requires unlock password (123) via cookie
     const unlocked = request.cookies.get(ISAAC_UNLOCK_COOKIE)?.value === '1'
     if (!unlocked) {
       return NextResponse.json(

@@ -71,7 +71,13 @@ export default function RequestList({ requests, onUpdate }: RequestListProps) {
   }
 
   return (
-    <div className="space-y-4">
+    <div className="space-y-4 max-h-[60vh] overflow-y-auto pr-2">
+      {/* Request count */}
+      <div className="sticky top-0 bg-white dark:bg-gray-800 py-2 z-10 border-b border-gray-200 dark:border-gray-700 mb-4">
+        <p className="text-sm text-gray-500 dark:text-gray-400">
+          Showing <span className="font-semibold text-purple-600">{requests.length}</span> request{requests.length !== 1 ? 's' : ''}
+        </p>
+      </div>
       {requests.map((request) => (
         <div
           key={request.id}

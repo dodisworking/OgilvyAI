@@ -1,16 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { getSessionFromCookie } from '@/lib/session'
 import { db } from '@/lib/db'
 
+// Isaac Mode master calendar endpoint - no auth required (uses Isaac Mode password on client)
 export async function GET(request: NextRequest) {
   try {
-    const cookieHeader = request.headers.get('cookie')
-    const session = await getSessionFromCookie(cookieHeader)
-
-    if (!session || !session.isAdmin) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-    }
-
     // Get all users with their approved and pending requests
     const users = await db.user.findMany({
       select: {

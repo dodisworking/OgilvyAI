@@ -2,6 +2,8 @@ import { NextRequest, NextResponse } from 'next/server'
 import { getSessionFromCookie } from '@/lib/session'
 import { db } from '@/lib/db'
 
+const ADMIN_PORTAL_COOKIE = 'admin_portal_user'
+
 // Get current user from session
 export async function GET(request: NextRequest) {
   try {
@@ -29,7 +31,13 @@ export async function GET(request: NextRequest) {
         )
       }
 
-      return NextResponse.json({ user: admin, isAdmin: true })
+      const portal = request.cookies.get(ADMIN_PORTAL_COOKIE)?.value === 'jess' ? 'jess' : 'tim'
+      const displayAdmin =
+        portal === 'jess'
+          ? { ...admin, name: 'Jess', email: 'jessica.coccaro@ogilvy.com' }
+          : { ...admin, name: 'Tim', email: 'tim.legallo@ogilvy.com' }
+
+      return NextResponse.json({ user: displayAdmin, isAdmin: true, adminPortal: portal })
     } else {
       // Fetch user with profile data
       const user = await db.user.findUnique({

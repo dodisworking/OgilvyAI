@@ -3,6 +3,20 @@ import nodemailer from 'nodemailer'
 const GMAIL_USER = process.env.GMAIL_USER
 const GMAIL_APP_PASSWORD = process.env.GMAIL_APP_PASSWORD
 const ADMIN_EMAIL = process.env.ADMIN_EMAIL || GMAIL_USER
+const TIM_EMAIL = process.env.TIM_EMAIL || 'tim.legallo@ogilvy.com'
+const ISAAC_NOTIFICATION_EMAIL = process.env.ISAAC_EMAIL || 'isaac.boruchowicz@ogilvy.com'
+const EMAIL_DEDUPE_WINDOW_MS = 60 * 1000
+const recentEmailSends = new Map<string, number>()
+
+const shouldSkipDuplicateEmail = (key: string) => {
+  const now = Date.now()
+  const lastSentAt = recentEmailSends.get(key)
+  if (lastSentAt && now - lastSentAt < EMAIL_DEDUPE_WINDOW_MS) {
+    return true
+  }
+  recentEmailSends.set(key, now)
+  return false
+}
 
 // Create transporter
 const transporter = nodemailer.createTransport({
@@ -96,7 +110,126 @@ export async function sendRequestNotificationToAdmin(data: RequestNotificationDa
   }
 }
 
+export interface RequestSubmissionNotificationData extends RequestNotificationData {}
+
+const toDateOnlyString = (date: Date) => {
+  return new Date(date).toLocaleDateString()
+}
+
+const getInclusiveDayCount = (startDate: Date, endDate: Date) => {
+  const start = new Date(startDate)
+  const end = new Date(endDate)
+  start.setHours(0, 0, 0, 0)
+  end.setHours(0, 0, 0, 0)
+  const diffDays = Math.floor((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24))
+  return Math.max(1, diffDays + 1)
+}
+
+export async function sendRequestSubmissionNotifications(data: RequestSubmissionNotificationData) {
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
+    console.error('Gmail credentials not configured - GMAIL_USER or GMAIL_APP_PASSWORD missing')
+    throw new Error('Gmail credentials not configured')
+  }
+
+  const requestTypeText = data.requestType === 'WFH'
+    ? 'Work From Home'
+    : data.requestType === 'TIME_OFF'
+      ? 'Time Off'
+      : 'Work From Home & Time Off'
+
+  const dateRange = toDateOnlyString(data.startDate) === toDateOnlyString(data.endDate)
+    ? toDateOnlyString(data.startDate)
+    : `${toDateOnlyString(data.startDate)} - ${toDateOnlyString(data.endDate)}`
+  const dayCount = getInclusiveDayCount(data.startDate, data.endDate)
+  const daysText = `${dayCount} day${dayCount === 1 ? '' : 's'}`
+  const threadTag = data.requestId ? `[Request ${data.requestId}]` : '[Request]'
+  if (data.requestId && shouldSkipDuplicateEmail(`submission:${data.requestId}`)) {
+    console.log(`⚠️ Skipping duplicate submission emails for request ${data.requestId}`)
+    return
+  }
+
+  const baseUrl = data.baseUrl || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+  const adminDashboardUrl = `${baseUrl}/admin`
+
+  const employeeHtml = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <h2 style="color: #333; margin-bottom: 16px;">Request Submitted</h2>
+      <p>Hi ${data.employeeName},</p>
+      <p>Your <strong>${requestTypeText}</strong> request was submitted successfully and is now <strong>waiting on Tim&apos;s approval</strong>.</p>
+      <div style="background-color: #f9f9f9; padding: 14px; border-radius: 8px; margin: 16px 0;">
+        <p style="margin: 4px 0;"><strong>Dates:</strong> ${dateRange}</p>
+        <p style="margin: 4px 0;"><strong>Duration:</strong> ${daysText}</p>
+        ${data.title ? `<p style="margin: 4px 0;"><strong>Title:</strong> ${data.title}</p>` : ''}
+        ${data.reason ? `<p style="margin: 4px 0;"><strong>Reason:</strong> ${data.reason}</p>` : ''}
+      </div>
+      <p style="color: #666; font-size: 14px;">You will receive another email once Tim approves or rejects this request.</p>
+    </div>
+  `
+
+  const adminHtml = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <h2 style="color: #333; margin-bottom: 20px;">New Time Off/WFH Request</h2>
+      <p style="font-size: 16px; margin-bottom: 20px;">
+        <strong>${data.employeeName}</strong> (${data.employeeEmail}) submitted a <strong>${requestTypeText}</strong> request for <strong>${daysText}</strong>.
+      </p>
+      
+      <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 20px 0;">
+        <p style="margin: 5px 0;"><strong>Dates:</strong> ${dateRange}</p>
+        <p style="margin: 5px 0;"><strong>Duration:</strong> ${daysText}</p>
+        ${data.title ? `<p style="margin: 5px 0;"><strong>Title:</strong> ${data.title}</p>` : ''}
+        ${data.reason ? `<p style="margin: 5px 0;"><strong>Reason:</strong> ${data.reason}</p>` : ''}
+      </div>
+
+      <div style="text-align: center; margin: 30px 0;">
+        <a href="${adminDashboardUrl}" 
+           style="display: inline-block; padding: 14px 28px; background: linear-gradient(135deg, #9333ea 0%, #ec4899 100%); 
+                  color: white; text-decoration: none; border-radius: 8px; font-weight: bold; font-size: 16px;
+                  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);">
+          Review Request
+        </a>
+      </div>
+    </div>
+  `
+
+  const employeeEmailResult = await transporter.sendMail({
+      from: GMAIL_USER,
+      to: data.employeeEmail,
+      subject: `${threadTag} Request received: ${requestTypeText} (${dateRange})`,
+      html: employeeHtml,
+      headers: data.requestId
+        ? {
+            'X-Request-ID': data.requestId,
+            'X-Thread-Key': `request-${data.requestId}`,
+          }
+        : undefined,
+    })
+
+  const timThreadResult = await transporter.sendMail({
+      from: GMAIL_USER,
+      to: 'tim.legallo@ogilvy.com',
+      cc: 'isaac.boruchowicz@ogilvy.com',
+      subject: `${threadTag} ${data.employeeName} submitted ${requestTypeText} (${daysText})`,
+      html: adminHtml,
+      headers: data.requestId
+        ? {
+            'X-Request-ID': data.requestId,
+            'X-Thread-Key': `request-${data.requestId}`,
+          }
+        : undefined,
+    })
+
+  console.log('✅ Submission emails sent', {
+    requestId: data.requestId,
+    employeeEmail: data.employeeEmail,
+    timThreadTo: 'tim.legallo@ogilvy.com',
+    timThreadCc: 'isaac.boruchowicz@ogilvy.com',
+    employeeAccepted: employeeEmailResult.accepted,
+    timThreadAccepted: timThreadResult.accepted,
+  })
+}
+
 export interface RequestDecisionData {
+  requestId?: string
   employeeName: string
   employeeEmail: string
   startDate: Date
@@ -104,6 +237,29 @@ export interface RequestDecisionData {
   requestType: string
   status: 'APPROVED' | 'REJECTED'
   adminNotes?: string
+  approvedByName?: string
+  approvedByEmail?: string
+}
+
+export interface PendingApprovalReminderData {
+  employeeName: string
+  employeeEmail: string
+  requestId: string
+  requestType: string
+  startDate: Date
+  endDate: Date
+  createdAt: Date
+  baseUrl?: string
+}
+
+export interface PendingRequestReportRow {
+  employeeName: string
+  employeeEmail: string
+  requestId: string
+  requestType: string
+  startDate: Date
+  endDate: Date
+  createdAt: Date
 }
 
 export async function sendRequestDecisionToEmployee(data: RequestDecisionData) {
@@ -118,12 +274,22 @@ export async function sendRequestDecisionToEmployee(data: RequestDecisionData) {
 
   const statusColor = data.status === 'APPROVED' ? '#28a745' : '#dc3545'
   const statusText = data.status === 'APPROVED' ? 'Approved' : 'Rejected'
+  const dateRange = data.startDate.toLocaleDateString() === data.endDate.toLocaleDateString()
+    ? data.startDate.toLocaleDateString()
+    : `${data.startDate.toLocaleDateString()} - ${data.endDate.toLocaleDateString()}`
+  const approvedByName = data.approvedByName || 'Tim Legallo'
+  const approvedByEmail = data.approvedByEmail || TIM_EMAIL
+  const threadTag = data.requestId ? `[Request ${data.requestId}]` : '[Request]'
+  if (data.requestId && shouldSkipDuplicateEmail(`decision:${data.requestId}:${data.status}`)) {
+    console.log(`⚠️ Skipping duplicate decision email for request ${data.requestId} (${data.status})`)
+    return
+  }
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
       <h2 style="color: #333;">Request ${statusText}</h2>
       <p>Hi ${data.employeeName},</p>
-      <p>Your ${requestTypeText} request has been <strong style="color: ${statusColor};">${statusText.toLowerCase()}</strong>.</p>
+      <p>Your ${requestTypeText} request has been <strong style="color: ${statusColor};">${statusText.toLowerCase()}</strong> by <strong>${approvedByName}</strong>.</p>
       <table style="width: 100%; border-collapse: collapse; margin: 20px 0;">
         <tr>
           <td style="padding: 8px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>Request Type:</strong></td>
@@ -137,6 +303,10 @@ export async function sendRequestDecisionToEmployee(data: RequestDecisionData) {
           <td style="padding: 8px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>End Date:</strong></td>
           <td style="padding: 8px; border: 1px solid #ddd;">${data.endDate.toLocaleDateString()}</td>
         </tr>
+        <tr>
+          <td style="padding: 8px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>Date Range:</strong></td>
+          <td style="padding: 8px; border: 1px solid #ddd;">${dateRange}</td>
+        </tr>
         ${data.adminNotes ? `
         <tr>
           <td style="padding: 8px; border: 1px solid #ddd; background-color: #f9f9f9;"><strong>Notes:</strong></td>
@@ -149,14 +319,197 @@ export async function sendRequestDecisionToEmployee(data: RequestDecisionData) {
   `
 
   try {
+    const ccRecipients = Array.from(
+      new Set(
+        [TIM_EMAIL, ISAAC_NOTIFICATION_EMAIL, approvedByEmail].filter(
+          (email): email is string => Boolean(email) && email !== data.employeeEmail
+        )
+      )
+    )
+
     await transporter.sendMail({
-      from: GMAIL_USER,
+      from: `"${approvedByName}" <${GMAIL_USER}>`,
       to: data.employeeEmail,
-      subject: `Your ${requestTypeText} Request has been ${statusText}`,
+      cc: ccRecipients.length > 0 ? ccRecipients.join(',') : undefined,
+      replyTo: approvedByEmail,
+      subject: `${threadTag} ${requestTypeText} ${statusText}`,
       html,
+      headers: data.requestId
+        ? {
+            'X-Request-ID': data.requestId,
+            'X-Thread-Key': `request-${data.requestId}`,
+          }
+        : undefined,
     })
   } catch (error) {
     console.error('Error sending email:', error)
+    throw error
+  }
+}
+
+export async function sendPendingApprovalReminderToTim(data: PendingApprovalReminderData) {
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
+    console.error('Gmail credentials not configured')
+    return
+  }
+
+  const requestTypeText = data.requestType === 'WFH'
+    ? 'Work From Home'
+    : data.requestType === 'TIME_OFF'
+      ? 'Time Off'
+      : 'Work From Home & Time Off'
+  const dateRange = data.startDate.toLocaleDateString() === data.endDate.toLocaleDateString()
+    ? data.startDate.toLocaleDateString()
+    : `${data.startDate.toLocaleDateString()} - ${data.endDate.toLocaleDateString()}`
+  const baseUrl = data.baseUrl || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+  const approveUrl = `${baseUrl}/admin`
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <h2 style="color: #333; margin-bottom: 14px;">Friendly Reminder: Pending Request</h2>
+      <p>Hey Tim,</p>
+      <p>
+        This is a reminder that <strong>${data.employeeName}</strong> (${data.employeeEmail}) submitted a
+        <strong> ${requestTypeText}</strong> request and it is still pending approval.
+      </p>
+      <div style="background-color: #f9f9f9; padding: 14px; border-radius: 8px; margin: 18px 0;">
+        <p style="margin: 4px 0;"><strong>Submitted:</strong> ${new Date(data.createdAt).toLocaleDateString()}</p>
+        <p style="margin: 4px 0;"><strong>Dates:</strong> ${dateRange}</p>
+        <p style="margin: 4px 0;"><strong>Request ID:</strong> ${data.requestId}</p>
+      </div>
+      <div style="text-align: center; margin: 26px 0;">
+        <a href="${approveUrl}"
+           style="display: inline-block; padding: 12px 22px; background: linear-gradient(135deg, #9333ea 0%, #ec4899 100%);
+                  color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">
+          Click here to review and approve/reject
+        </a>
+      </div>
+    </div>
+  `
+
+  await transporter.sendMail({
+    from: GMAIL_USER,
+    to: TIM_EMAIL,
+    subject: `[Reminder] Pending request from ${data.employeeName} (${requestTypeText})`,
+    html,
+  })
+}
+
+export async function sendPendingRequestReportToTim(rows: PendingRequestReportRow[], baseUrl?: string) {
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
+    console.error('Gmail credentials not configured')
+    return
+  }
+
+  if (!rows.length) return
+
+  const appBaseUrl = baseUrl || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
+  const reviewUrl = `${appBaseUrl}/admin`
+
+  const formatType = (requestType: string) =>
+    requestType === 'WFH'
+      ? 'Work From Home'
+      : requestType === 'TIME_OFF'
+        ? 'Time Off'
+        : 'WFH & Time Off'
+
+  const rowsHtml = rows
+    .map((row) => {
+      const dateRange = row.startDate.toLocaleDateString() === row.endDate.toLocaleDateString()
+        ? row.startDate.toLocaleDateString()
+        : `${row.startDate.toLocaleDateString()} - ${row.endDate.toLocaleDateString()}`
+      return `
+        <tr>
+          <td style="padding: 8px; border: 1px solid #e5e7eb;">${row.employeeName}</td>
+          <td style="padding: 8px; border: 1px solid #e5e7eb;">${row.employeeEmail}</td>
+          <td style="padding: 8px; border: 1px solid #e5e7eb;">${formatType(row.requestType)}</td>
+          <td style="padding: 8px; border: 1px solid #e5e7eb;">${dateRange}</td>
+          <td style="padding: 8px; border: 1px solid #e5e7eb;">${new Date(row.createdAt).toLocaleDateString()}</td>
+        </tr>
+      `
+    })
+    .join('')
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 760px; margin: 0 auto; padding: 20px;">
+      <h2 style="color: #333; margin-bottom: 10px;">Pending Requests Report</h2>
+      <p style="margin-bottom: 16px;">
+        Hey Tim, here is a simple summary of team members still waiting for approval.
+      </p>
+      <table style="width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px;">
+        <thead>
+          <tr style="background: #f3f4f6;">
+            <th style="text-align: left; padding: 8px; border: 1px solid #e5e7eb;">Name</th>
+            <th style="text-align: left; padding: 8px; border: 1px solid #e5e7eb;">Email</th>
+            <th style="text-align: left; padding: 8px; border: 1px solid #e5e7eb;">Type</th>
+            <th style="text-align: left; padding: 8px; border: 1px solid #e5e7eb;">Dates</th>
+            <th style="text-align: left; padding: 8px; border: 1px solid #e5e7eb;">Submitted</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${rowsHtml}
+        </tbody>
+      </table>
+      <div style="text-align: center; margin: 24px 0;">
+        <a href="${reviewUrl}"
+           style="display: inline-block; padding: 12px 20px; background: linear-gradient(135deg, #9333ea 0%, #ec4899 100%);
+                  color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">
+          Review Pending Requests
+        </a>
+      </div>
+    </div>
+  `
+
+  await transporter.sendMail({
+    from: GMAIL_USER,
+    to: TIM_EMAIL,
+    subject: `Pending Requests Report (${rows.length})`,
+    html,
+  })
+}
+
+export async function sendRequestDecisionNotificationToTim(data: RequestDecisionData) {
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
+    console.error('Gmail credentials not configured')
+    return
+  }
+
+  if (!TIM_EMAIL) {
+    console.error('TIM_EMAIL is not configured')
+    return
+  }
+
+  const requestTypeText = data.requestType === 'WFH'
+    ? 'Work From Home'
+    : data.requestType === 'TIME_OFF'
+      ? 'Time Off'
+      : 'Work From Home & Time Off'
+  const statusText = data.status === 'APPROVED' ? 'approved' : 'rejected'
+  const dateRange = data.startDate.toLocaleDateString() === data.endDate.toLocaleDateString()
+    ? data.startDate.toLocaleDateString()
+    : `${data.startDate.toLocaleDateString()} - ${data.endDate.toLocaleDateString()}`
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <h2 style="color: #333;">Request Decision Logged</h2>
+      <p><strong>${data.employeeName}</strong> (${data.employeeEmail}) was <strong>${statusText}</strong> for:</p>
+      <div style="background-color: #f9f9f9; padding: 15px; border-radius: 8px; margin: 16px 0;">
+        <p style="margin: 5px 0;"><strong>Type:</strong> ${requestTypeText}</p>
+        <p style="margin: 5px 0;"><strong>Dates:</strong> ${dateRange}</p>
+        ${data.adminNotes ? `<p style="margin: 5px 0;"><strong>Notes:</strong> ${data.adminNotes}</p>` : ''}
+      </div>
+    </div>
+  `
+
+  try {
+    await transporter.sendMail({
+      from: GMAIL_USER,
+      to: TIM_EMAIL,
+      subject: `Request ${statusText}: ${data.employeeName} (${requestTypeText})`,
+      html,
+    })
+  } catch (error) {
+    console.error('Error sending decision notification to Tim:', error)
     throw error
   }
 }

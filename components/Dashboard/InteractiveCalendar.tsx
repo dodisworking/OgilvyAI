@@ -119,9 +119,25 @@ export default function InteractiveCalendar({ initialBrush, userName = '', initi
     // Don't reset hasMouseMoved here - let onClick check it
   }
 
+  const parseDateLocal = (dateStr: string) => {
+    const [year, month, day] = dateStr.split('-').map(Number)
+    // Use noon local time to avoid any timezone/DST shifting
+    return new Date(year, month - 1, day, 12, 0, 0, 0)
+  }
+
+  // Explicit local date formatter to avoid any timezone issues
+  const formatDateLocal = (date: Date, includeYear = true) => {
+    const months = ['January', 'February', 'March', 'April', 'May', 'June', 
+                    'July', 'August', 'September', 'October', 'November', 'December']
+    const monthName = months[date.getMonth()]
+    const day = date.getDate()
+    const year = date.getFullYear()
+    return includeYear ? `${monthName} ${day}, ${year}` : `${monthName} ${day}`
+  }
+
   const groupedDates = useMemo(() => {
     const sortedDates = Array.from(selectedDays.entries())
-      .map(([dateStr, type]) => ({ date: new Date(dateStr), type }))
+      .map(([dateStr, type]) => ({ date: parseDateLocal(dateStr), type }))
       .sort((a, b) => a.date.getTime() - b.date.getTime())
 
     const ranges: { startDate: Date; endDate: Date; requestType: 'TIME_OFF' | 'WFH' }[] = []
@@ -186,36 +202,26 @@ export default function InteractiveCalendar({ initialBrush, userName = '', initi
       dayBreakdown[dateKey] = type
     })
     
-    let finalDates: { startDate: Date; endDate: Date; requestType: 'TIME_OFF' | 'WFH' | 'BOTH'; title?: string; reason?: string; dayBreakdown?: Record<string, 'TIME_OFF' | 'WFH'> }[]
-    
-    if (hasTimeOff && hasWFH) {
-      // If both types are selected, combine them into one request with type BOTH
-      // Find the earliest start date and latest end date from all selected days
-      const allSelectedDates = Array.from(selectedDays.keys())
-        .map(dateStr => new Date(dateStr))
-        .sort((a, b) => a.getTime() - b.getTime())
-      
-      const earliestStart = allSelectedDates[0]
-      const latestEnd = allSelectedDates[allSelectedDates.length - 1]
-      
-      // Create one combined request with type BOTH and day breakdown
-      finalDates = [{
+    const allSelectedDates = Array.from(selectedDays.keys())
+      .map(dateStr => parseDateLocal(dateStr))
+      .sort((a, b) => a.getTime() - b.getTime())
+
+    const earliestStart = allSelectedDates[0]
+    const latestEnd = allSelectedDates[allSelectedDates.length - 1]
+
+    const requestType: 'TIME_OFF' | 'WFH' | 'BOTH' =
+      hasTimeOff && hasWFH ? 'BOTH' : hasTimeOff ? 'TIME_OFF' : 'WFH'
+
+    const finalDates: { startDate: Date; endDate: Date; requestType: 'TIME_OFF' | 'WFH' | 'BOTH'; title?: string; reason?: string; dayBreakdown?: Record<string, 'TIME_OFF' | 'WFH'> }[] = [
+      {
         startDate: earliestStart,
         endDate: latestEnd,
-        requestType: 'BOTH',
+        requestType,
         title: title || undefined,
         reason: reason || undefined,
         dayBreakdown,
-      }]
-    } else {
-      // If only one type, submit as normal (still include breakdown for consistency)
-      finalDates = groupedDates.map(range => ({
-        ...range,
-        title: title || undefined,
-        reason: reason || undefined,
-        dayBreakdown,
-      }))
-    }
+      },
+    ]
 
     // Close review modal first
     setShowReview(false)
@@ -247,59 +253,92 @@ export default function InteractiveCalendar({ initialBrush, userName = '', initi
   }
 
   if (showReview) {
+    // Calculate summary stats
+    const timeOffDays = Array.from(selectedDays.values()).filter(v => v === 'TIME_OFF').length
+    const wfhDays = Array.from(selectedDays.values()).filter(v => v === 'WFH').length
+    const hasTimeOff = timeOffDays > 0
+    const hasWFH = wfhDays > 0
+    const isCombined = hasTimeOff && hasWFH
+    
+    // Get sorted dates for display
+    const sortedDayEntries = Array.from(selectedDays.entries())
+      .map(([dateStr, type]) => ({ date: parseDateLocal(dateStr), type, dateStr }))
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+    
+    const firstDate = sortedDayEntries[0]?.date
+    const lastDate = sortedDayEntries[sortedDayEntries.length - 1]?.date
+
     return (
       <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto">
         <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-3xl w-full p-8 relative my-8">
           <h2 className="text-2xl font-bold mb-6">
-            Review Your Selection
+            Review Your Submission
           </h2>
 
-          {/* Combined Package Notice */}
-          {groupedDates.some(d => d.requestType === 'TIME_OFF') && groupedDates.some(d => d.requestType === 'WFH') && (
-            <div className="mb-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-2 border-purple-300 dark:border-purple-700 rounded-lg">
-              <p className="text-sm font-semibold text-purple-800 dark:text-purple-200">
-                📦 Combined Package
-              </p>
-              <p className="text-xs text-purple-700 dark:text-purple-300 mt-1">
-                Your Time Off and Work From Home days will be submitted together as one combined request.
+          {/* Single Unified Submission Card */}
+          <div className={`p-5 rounded-xl border-2 mb-6 ${
+            isCombined 
+              ? 'bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border-purple-400 dark:border-purple-600'
+              : hasTimeOff
+              ? 'bg-red-50 dark:bg-red-900/20 border-red-400 dark:border-red-600'
+              : 'bg-blue-50 dark:bg-blue-900/20 border-blue-400 dark:border-blue-600'
+          }`}>
+            {/* Header - ONE Submission */}
+            <div className="flex items-center gap-3 mb-4">
+              <div className={`w-10 h-10 rounded-full flex items-center justify-center text-xl ${
+                isCombined 
+                  ? 'bg-gradient-to-r from-red-400 to-blue-400'
+                  : hasTimeOff
+                  ? 'bg-red-400'
+                  : 'bg-blue-400'
+              }`}>
+                {isCombined ? '📦' : hasTimeOff ? '🏖️' : '🏠'}
+              </div>
+              <div>
+                <p className="font-bold text-lg">
+                  {isCombined 
+                    ? 'Combined Request' 
+                    : hasTimeOff 
+                    ? 'Time Off Request' 
+                    : 'Work From Home Request'}
+                </p>
+                <p className="text-sm text-gray-600 dark:text-gray-400">
+                  {selectedDays.size} day{selectedDays.size !== 1 ? 's' : ''} total
+                  {isCombined && ` • ${timeOffDays} Time Off, ${wfhDays} WFH`}
+                </p>
+              </div>
+            </div>
+
+            {/* Date Range Summary */}
+            <div className="mb-4 p-3 bg-white/50 dark:bg-gray-700/50 rounded-lg">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300">
+                📅 {firstDate && lastDate && (
+                  isSameDay(firstDate, lastDate)
+                    ? formatDateLocal(firstDate, true)
+                    : `${formatDateLocal(firstDate, false)} - ${formatDateLocal(lastDate, true)}`
+                )}
               </p>
             </div>
-          )}
 
-          {/* Date Ranges */}
-          <div className="space-y-4 mb-6 max-h-64 overflow-y-auto">
-            {groupedDates.map((range, idx) => {
-              const requestType = range.requestType as 'TIME_OFF' | 'WFH' | 'BOTH'
-              return (
-                <div
-                  key={idx}
-                  className={`p-4 rounded-lg border-2 ${
-                    requestType === 'TIME_OFF'
-                      ? 'bg-red-50 dark:bg-red-900/20 border-red-300 dark:border-red-700'
-                      : requestType === 'WFH'
-                      ? 'bg-blue-50 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700'
-                      : 'bg-gradient-to-r from-red-50 to-blue-50 dark:from-red-900/20 dark:to-blue-900/20 border-purple-300 dark:border-purple-700'
-                  }`}
-                >
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="font-semibold">
-                        {requestType === 'TIME_OFF' 
-                          ? 'Time Off' 
-                          : requestType === 'WFH'
-                          ? 'Work From Home'
-                          : 'Time Off & Work From Home'}
-                      </p>
-                      <p className="text-sm text-gray-600 dark:text-gray-400 mt-1">
-                        {isSameDay(range.startDate, range.endDate)
-                          ? format(range.startDate, 'MMMM d, yyyy')
-                          : `${format(range.startDate, 'MMMM d')} - ${format(range.endDate, 'MMMM d, yyyy')}`}
-                      </p>
-                    </div>
+            {/* Day-by-Day Breakdown */}
+            <div className="max-h-40 overflow-y-auto">
+              <p className="text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2">Day Breakdown:</p>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                {sortedDayEntries.map(({ date, type }, idx) => (
+                  <div
+                    key={idx}
+                    className={`px-3 py-2 rounded-lg text-xs font-medium flex items-center gap-2 ${
+                      type === 'TIME_OFF'
+                        ? 'bg-red-100 dark:bg-red-900/40 text-red-800 dark:text-red-200'
+                        : 'bg-blue-100 dark:bg-blue-900/40 text-blue-800 dark:text-blue-200'
+                    }`}
+                  >
+                    <span>{type === 'TIME_OFF' ? '🏖️' : '🏠'}</span>
+                    <span>{formatDateLocal(date, false)}</span>
                   </div>
-                </div>
-              )
-            })}
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Title Field */}

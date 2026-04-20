@@ -9,6 +9,7 @@ import Button from '@/components/UI/Button'
 export default function Home() {
   const [isLogin, setIsLogin] = useState(true)
   const [showTimLogin, setShowTimLogin] = useState(false)
+  const [adminPortal, setAdminPortal] = useState<'tim' | 'jess'>('tim')
   const [timPassword, setTimPassword] = useState('')
   const [timError, setTimError] = useState('')
   const [isLoadingTim, setIsLoadingTim] = useState(false)
@@ -48,6 +49,7 @@ export default function Home() {
         credentials: 'include',
         body: JSON.stringify({
           password: timPassword,
+          portal: adminPortal,
         }),
       })
 
@@ -94,13 +96,26 @@ export default function Home() {
               </button>
             </div>
 
-            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+            <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700 space-y-3">
               <Button
                 variant="outline"
-                onClick={() => setShowTimLogin(true)}
+                onClick={() => {
+                  setAdminPortal('tim')
+                  setShowTimLogin(true)
+                }}
                 className="w-full text-sm"
               >
                 Are you Tim?
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => {
+                  setAdminPortal('jess')
+                  setShowTimLogin(true)
+                }}
+                className="w-full text-sm"
+              >
+                Are you Jess?
               </Button>
             </div>
           </div>
@@ -125,7 +140,7 @@ export default function Home() {
             <div className="text-center mb-6">
               <div className="text-5xl mb-4">👑</div>
               <h2 className="text-2xl font-bold bg-gradient-to-r from-yellow-500 to-orange-500 bg-clip-text text-transparent">
-                Tim Login
+                {adminPortal === 'jess' ? 'Jess Login' : 'Tim Login'}
               </h2>
               <p className="text-gray-500 dark:text-gray-400 text-sm mt-2">
                 Enter your password to access admin
@@ -155,7 +170,7 @@ export default function Home() {
                 isLoading={isLoadingTim}
                 className="w-full bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-600 hover:to-orange-600"
               >
-                👑 Login as Tim
+                👑 Login as {adminPortal === 'jess' ? 'Jess' : 'Tim'}
               </Button>
             </form>
           </div>

@@ -3,6 +3,8 @@ import { db } from '@/lib/db'
 import { getSessionFromCookie } from '@/lib/session'
 import { sendRequestDecisionToEmployee } from '@/lib/email'
 
+const ADMIN_PORTAL_COOKIE = 'admin_portal_user'
+
 export async function POST(request: NextRequest) {
   try {
     const cookieHeader = request.headers.get('cookie')
@@ -68,9 +70,16 @@ export async function POST(request: NextRequest) {
       },
     })
 
-    // Send email notification to employee
+    // Send one threaded confirmation email to employee, with Tim + Isaac copied
     try {
+      const portal = request.cookies.get(ADMIN_PORTAL_COOKIE)?.value === 'jess' ? 'jess' : 'tim'
+      const approver =
+        portal === 'jess'
+          ? { name: 'Jessica Coccaro', email: 'jessica.coccaro@ogilvy.com' }
+          : { name: 'Tim Legallo', email: 'tim.legallo@ogilvy.com' }
+
       await sendRequestDecisionToEmployee({
+        requestId: requestId,
         employeeName: requestData.user.name,
         employeeEmail: requestData.user.email,
         startDate: requestData.startDate,
@@ -78,6 +87,8 @@ export async function POST(request: NextRequest) {
         requestType: requestData.requestType,
         status: status as 'APPROVED' | 'REJECTED',
         adminNotes: adminNotes || undefined,
+        approvedByName: approver.name,
+        approvedByEmail: approver.email,
       })
     } catch (emailError) {
       console.error('Failed to send email notification:', emailError)

@@ -26,7 +26,12 @@ interface DrowningRequest {
   notifiedUsers: string[] | null
 }
 
-export default function DrowningAdmin() {
+interface DrowningAdminProps {
+  apiEndpoint?: string // Optional custom API endpoint for Isaac Mode
+  usersEndpoint?: string // Optional custom users endpoint for Isaac Mode
+}
+
+export default function DrowningAdmin({ apiEndpoint, usersEndpoint }: DrowningAdminProps = {}) {
   const [drowningRequests, setDrowningRequests] = useState<DrowningRequest[]>([])
   const [users, setUsers] = useState<User[]>([])
   const [selectedRequest, setSelectedRequest] = useState<DrowningRequest | null>(null)
@@ -38,11 +43,12 @@ export default function DrowningAdmin() {
   useEffect(() => {
     fetchDrowningRequests()
     fetchUsers()
-  }, [])
+  }, [apiEndpoint, usersEndpoint])
 
   const fetchDrowningRequests = async () => {
     try {
-      const response = await fetch('/api/drowning', {
+      const endpoint = apiEndpoint || '/api/drowning'
+      const response = await fetch(endpoint, {
         credentials: 'include',
       })
       if (response.ok) {
@@ -58,7 +64,8 @@ export default function DrowningAdmin() {
 
   const fetchUsers = async () => {
     try {
-      const response = await fetch('/api/drowning/users', {
+      const endpoint = usersEndpoint || '/api/drowning/users'
+      const response = await fetch(endpoint, {
         credentials: 'include',
       })
       if (response.ok) {

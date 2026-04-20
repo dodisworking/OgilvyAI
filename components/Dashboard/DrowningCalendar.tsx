@@ -37,10 +37,12 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
     const fetchUsers = async () => {
       setIsLoadingUsers(true)
       try {
-        const response = await fetch('/api/drowning/users')
+        const response = await fetch('/api/drowning/users', {
+          credentials: 'include',
+        })
         if (response.ok) {
           const data = await response.json()
-          setAllUsers(data.users)
+          setAllUsers(data.users || [])
         }
       } catch (error) {
         console.error('Failed to fetch users:', error)

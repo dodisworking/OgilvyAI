@@ -2,12 +2,30 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { createSession, COOKIE_NAME } from '@/lib/session'
 
-// Tim's password - required for admin login
+const ADMIN_PORTAL_COOKIE = 'admin_portal_user'
+
+// Admin portal passwords
 const TIM_PASSWORD = 'Hellomynameistim'
+const JESS_PASSWORD = 'Hellomynameisjess'
+
+type AdminPortal = 'tim' | 'jess'
+
+const PORTAL_PROFILE: Record<AdminPortal, { name: string; email: string; password: string }> = {
+  tim: {
+    name: 'Tim',
+    email: 'tim.legallo@ogilvy.com',
+    password: TIM_PASSWORD,
+  },
+  jess: {
+    name: 'Jess',
+    email: 'jessica.coccaro@ogilvy.com',
+    password: JESS_PASSWORD,
+  },
+}
 
 export async function POST(request: NextRequest) {
   try {
-    const { password } = await request.json()
+    const { password, portal } = await request.json()
 
     // Password is required
     if (!password) {
@@ -17,8 +35,21 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Verify password
-    if (password !== TIM_PASSWORD) {
+    let selectedPortal: AdminPortal | null = null
+
+    if (portal === 'tim' || portal === 'jess') {
+      selectedPortal = portal
+      if (password !== PORTAL_PROFILE[selectedPortal].password) {
+        return NextResponse.json(
+          { error: 'Invalid password' },
+          { status: 401 }
+        )
+      }
+    } else if (password === TIM_PASSWORD) {
+      selectedPortal = 'tim'
+    } else if (password === JESS_PASSWORD) {
+      selectedPortal = 'jess'
+    } else {
       return NextResponse.json(
         { error: 'Invalid password' },
         { status: 401 }
@@ -38,12 +69,15 @@ export async function POST(request: NextRequest) {
     // Create session in database
     const token = await createSession(admin.id, admin.email, true)
 
-    // Create response with admin data
+    const profile = PORTAL_PROFILE[selectedPortal]
+
+    // Create response with portal admin display data
     const response = NextResponse.json({
       admin: {
         id: admin.id,
-        email: admin.email,
-        name: admin.name,
+        email: profile.email,
+        name: profile.name,
+        portal: selectedPortal,
       },
     })
 
@@ -53,6 +87,13 @@ export async function POST(request: NextRequest) {
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7, // 7 days
+      path: '/',
+    })
+    response.cookies.set(ADMIN_PORTAL_COOKIE, selectedPortal, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7,
       path: '/',
     })
 
