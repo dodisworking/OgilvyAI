@@ -68,25 +68,33 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Find the admin (Tim)
-    const admin = await db.admin.findFirst()
-    
-    if (!admin) {
-      return NextResponse.json(
-        { error: 'No admin account found' },
-        { status: 404 }
-      )
+    // Prefer a real admin row if available, but do not block portal login if missing.
+    // Some environments may not have seeded the admins table.
+    const admin = await db.admin
+      .findFirst({
+        select: {
+          id: true,
+          email: true,
+          name: true,
+        },
+      })
+      .catch(() => null)
+
+    const adminSessionIdentity = admin ?? {
+      id: 'admin-portal',
+      email: 'tim.legallo@ogilvy.com',
+      name: 'Tim',
     }
 
     // Create session in database
-    const token = await createSession(admin.id, admin.email, true)
+    const token = await createSession(adminSessionIdentity.id, adminSessionIdentity.email, true)
 
     const profile = PORTAL_PROFILE[selectedPortal]
 
     // Create response with portal admin display data
     const response = NextResponse.json({
       admin: {
-        id: admin.id,
+        id: adminSessionIdentity.id,
         email: profile.email,
         name: profile.name,
         portal: selectedPortal,

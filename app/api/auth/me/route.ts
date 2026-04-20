@@ -19,23 +19,23 @@ export async function GET(request: NextRequest) {
 
     // Fetch user or admin data based on session type
     if (session.isAdmin) {
-      const admin = await db.admin.findUnique({
-        where: { id: session.userId },
-        select: { id: true, email: true, name: true },
-      })
-
-      if (!admin) {
-        return NextResponse.json(
-          { error: 'Admin not found' },
-          { status: 404 }
-        )
-      }
+      const admin = await db.admin
+        .findUnique({
+          where: { id: session.userId },
+          select: { id: true, email: true, name: true },
+        })
+        .catch(() => null)
 
       const portal = request.cookies.get(ADMIN_PORTAL_COOKIE)?.value === 'jess' ? 'jess' : 'tim'
+      const baseAdmin = admin ?? {
+        id: session.userId,
+        email: 'tim.legallo@ogilvy.com',
+        name: 'Tim',
+      }
       const displayAdmin =
         portal === 'jess'
-          ? { ...admin, name: 'Jess', email: 'jessica.coccaro@ogilvy.com' }
-          : { ...admin, name: 'Tim', email: 'tim.legallo@ogilvy.com' }
+          ? { ...baseAdmin, name: 'Jess', email: 'jessica.coccaro@ogilvy.com' }
+          : { ...baseAdmin, name: 'Tim', email: 'tim.legallo@ogilvy.com' }
 
       return NextResponse.json({ user: displayAdmin, isAdmin: true, adminPortal: portal })
     } else {
