@@ -597,12 +597,16 @@ export function buildIcsCalendarInvite({
     lines.push('BEGIN:VEVENT')
     lines.push(`UID:${uid}`)
     lines.push(`DTSTAMP:${dtstamp}`)
+    lines.push(`CREATED:${dtstamp}`)
+    lines.push(`LAST-MODIFIED:${dtstamp}`)
     lines.push(`DTSTART;VALUE=DATE:${formatIcsDate(start)}`)
     lines.push(`DTEND;VALUE=DATE:${formatIcsDate(exclusiveEnd)}`)
     lines.push(`SUMMARY:${escapeIcsText(summary)}`)
     lines.push('TRANSP:TRANSPARENT') // appears as Free
     lines.push('X-MICROSOFT-CDO-BUSYSTATUS:FREE')
+    lines.push('X-MICROSOFT-CDO-INTENDEDSTATUS:FREE')
     lines.push('X-MICROSOFT-CDO-ALLDAYEVENT:TRUE')
+    lines.push('X-MICROSOFT-CDO-IMPORTANCE:1')
     lines.push('STATUS:CONFIRMED')
     lines.push('CLASS:PUBLIC')
     lines.push('SEQUENCE:0')
@@ -666,15 +670,6 @@ export async function sendApprovedTimeOffCalendarInvite(
 
   if (!attendees.length) return
 
-  const ics = buildIcsCalendarInvite({
-    organizerName,
-    organizerEmail,
-    attendees,
-    ranges: data.ranges,
-    subjectPersonName: data.employeeName,
-    uidSeed: data.requestId,
-  })
-
   const rangeSummary = data.ranges
     .map((r) => {
       const sameDay = r.startDate.toDateString() === r.endDate.toDateString()
@@ -700,27 +695,49 @@ export async function sendApprovedTimeOffCalendarInvite(
     </div>
   `
 
-  // One invite-style email per attendee so each one gets a real RSVP-able invite.
+  // One invite-style email per attendee with a personal ICS — addresses only
+  // them as the ATTENDEE, which is what Outlook expects for an inline invite.
   const subject = `${data.employeeName} – Time Off / Work Remote`
 
   const sendPromises = attendees.map(async (a) => {
     try {
+      const ics = buildIcsCalendarInvite({
+        organizerName,
+        organizerEmail,
+        attendees: [a],
+        ranges: data.ranges,
+        subjectPersonName: data.employeeName,
+        uidSeed: `${data.requestId}-${a.email.toLowerCase()}`,
+      })
+
       await transporter.sendMail({
         from: `"${organizerName}" <${GMAIL_USER}>`,
         to: a.email,
         subject,
         html,
-        icalEvent: {
-          method: 'REQUEST',
-          content: ics,
-          filename: 'invite.ics',
-        },
+        // Outlook-friendly structure:
+        //   - text/html body (the human-readable note)
+        //   - text/calendar; method=REQUEST as a multipart/alternative part
+        //   - .ics attachment as a fallback for clients that ignore the alt part
         alternatives: [
           {
-            contentType: 'text/calendar; charset=UTF-8; method=REQUEST',
+            contentType: 'text/calendar; charset="UTF-8"; method=REQUEST',
             content: ics,
+            contentTransferEncoding: '7bit',
           },
         ],
+        attachments: [
+          {
+            filename: 'invite.ics',
+            content: ics,
+            contentType: 'application/ics; name="invite.ics"',
+            contentDisposition: 'attachment',
+          },
+        ],
+        headers: {
+          // Outlook-specific signal that this message is a calendar invite.
+          'Content-Class': 'urn:content-classes:calendarmessage',
+        },
       } as any)
       return { email: a.email, success: true }
     } catch (error: any) {
