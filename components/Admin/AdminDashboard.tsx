@@ -214,6 +214,7 @@ export default function AdminDashboard({
                 showEditButton={enableTeamCalendarEdit}
                 allowPendingApproval={enableTeamCalendarEdit}
                 onRequestUpdated={onRefresh}
+                forceIsaacCode={forceIsaacCode}
               />
             </div>
             

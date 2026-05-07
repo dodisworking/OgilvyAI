@@ -414,6 +414,7 @@ export default function RequestCard({ request, onUpdate, compactCalendarModal = 
               <MasterCalendar
                 initialMonth={new Date(request.startDate)}
                 compact={compactCalendarModal}
+                forceIsaacCode={forceIsaacCode}
                 pendingRequest={
                   request.status === 'PENDING'
                     ? {

@@ -551,10 +551,11 @@ export default function IsaacMode({ onClose }: IsaacModeProps) {
                       🔄 Sync All Data
                     </button>
                   </div>
-                  <MasterCalendar 
-                    apiEndpoint="/api/isaac-mode/master-calendar" 
+                  <MasterCalendar
+                    apiEndpoint="/api/isaac-mode/master-calendar"
                     editable={true}
                     onRequestUpdated={fetchAllRequests}
+                    forceIsaacCode={password}
                   />
                 </div>
               )}

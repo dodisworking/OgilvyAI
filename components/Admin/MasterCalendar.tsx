@@ -39,6 +39,8 @@ interface MasterCalendarProps {
   requestsData?: Request[] // Optional data source to keep calendar linked to existing requests
   /** Embedded in Tim App iPhone sheet: tighter chrome + fit zoom */
   compact?: boolean
+  /** When set, inline approval is sent as Isaac with this code (used inside Isaac Mode). */
+  forceIsaacCode?: string
 }
 
 interface EditingRequest {
@@ -62,6 +64,7 @@ export default function MasterCalendar({
   onRequestUpdated,
   requestsData,
   compact = false,
+  forceIsaacCode,
 }: MasterCalendarProps = {}) {
   const [currentMonth, setCurrentMonth] = useState(initialMonth || new Date())
   const [userSchedules, setUserSchedules] = useState<UserSchedule[]>([])
@@ -296,6 +299,7 @@ export default function MasterCalendar({
         body: JSON.stringify({
           requestId: editingRequest.requestId,
           status: 'APPROVED',
+          approveAsIsaacCode: forceIsaacCode || undefined,
         }),
       })
 
