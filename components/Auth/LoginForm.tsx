@@ -276,6 +276,7 @@ export default function LoginForm() {
   }
 
   return (
+    <>
     <form onSubmit={handleSubmit} className="space-y-6">
       <div>
         <label htmlFor="email" className="block text-sm font-medium mb-2">
@@ -371,8 +372,11 @@ export default function LoginForm() {
       <Button type="submit" isLoading={isLoading} className="w-full">
         {needsProfilePicture ? 'Complete Profile' : 'Sign In'}
       </Button>
+    </form>
 
-      {/* Render the modal — defined below */}
+      {/* Modal sits OUTSIDE the login form — the form/submit events of the
+          inner reset wizard would otherwise bubble up and trigger the
+          outer login submit, which closes the modal. */}
       {showForgot && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto" role="dialog">
           <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6 relative my-8 max-h-[90vh] overflow-y-auto">
@@ -547,7 +551,7 @@ export default function LoginForm() {
           </div>
         </div>
       )}
-    </form>
+    </>
   )
 }
 
