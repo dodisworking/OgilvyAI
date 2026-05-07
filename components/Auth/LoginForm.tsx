@@ -17,7 +17,7 @@ export default function LoginForm() {
 
   // Forgot-password flow state
   const [showForgot, setShowForgot] = useState(false)
-  const [forgotStep, setForgotStep] = useState<'email' | 'reset'>('email')
+  const [forgotStep, setForgotStep] = useState<'email' | 'code' | 'password'>('email')
   const [forgotEmail, setForgotEmail] = useState('')
   const [forgotCode, setForgotCode] = useState('')
   const [forgotNewPassword, setForgotNewPassword] = useState('')
@@ -25,6 +25,7 @@ export default function LoginForm() {
   const [forgotMessage, setForgotMessage] = useState('')
   const [forgotError, setForgotError] = useState('')
   const [forgotLoading, setForgotLoading] = useState(false)
+  const [forgotMaskedEmail, setForgotMaskedEmail] = useState('')
 
   const closeForgot = () => {
     setShowForgot(false)
@@ -35,6 +36,7 @@ export default function LoginForm() {
     setForgotConfirmPassword('')
     setForgotError('')
     setForgotMessage('')
+    setForgotMaskedEmail('')
   }
 
   const handleSendCode = async (e: React.FormEvent) => {
@@ -52,14 +54,44 @@ export default function LoginForm() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email: forgotEmail.trim() }),
       })
+      const data = await res.json().catch(() => ({}))
       if (!res.ok) {
-        const data = await res.json().catch(() => ({}))
         throw new Error(data.error || 'Could not send reset code')
       }
-      setForgotMessage('If that email is registered, a 6-digit code is on its way. Check your inbox.')
-      setForgotStep('reset')
+      setForgotMaskedEmail(data.maskedEmail || forgotEmail.trim())
+      setForgotMessage(`Code sent to ${data.maskedEmail || forgotEmail.trim()}. Check your inbox (and spam).`)
+      setForgotStep('code')
     } catch (err: any) {
       setForgotError(err.message || 'Something went wrong')
+    } finally {
+      setForgotLoading(false)
+    }
+  }
+
+  const handleVerifyCode = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setForgotError('')
+    setForgotMessage('')
+    const code = forgotCode.trim()
+    if (!/^\d{6}$/.test(code)) {
+      setForgotError('Enter the 6-digit code from your email')
+      return
+    }
+    setForgotLoading(true)
+    try {
+      const res = await fetch('/api/auth/verify-reset-code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail.trim(), code }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) {
+        throw new Error(data.error || 'Invalid code')
+      }
+      setForgotMessage('')
+      setForgotStep('password')
+    } catch (err: any) {
+      setForgotError(err.message || 'Could not verify the code')
     } finally {
       setForgotLoading(false)
     }
@@ -98,6 +130,26 @@ export default function LoginForm() {
       setTimeout(closeForgot, 1200)
     } catch (err: any) {
       setForgotError(err.message || 'Something went wrong')
+    } finally {
+      setForgotLoading(false)
+    }
+  }
+
+  const resendCode = async () => {
+    setForgotError('')
+    setForgotMessage('')
+    setForgotLoading(true)
+    try {
+      const res = await fetch('/api/auth/forgot-password', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: forgotEmail.trim() }),
+      })
+      const data = await res.json().catch(() => ({}))
+      if (!res.ok) throw new Error(data.error || 'Could not resend code')
+      setForgotMessage(`A fresh code is on its way to ${data.maskedEmail || forgotEmail.trim()}.`)
+    } catch (err: any) {
+      setForgotError(err.message || 'Could not resend code')
     } finally {
       setForgotLoading(false)
     }
@@ -336,13 +388,51 @@ export default function LoginForm() {
             <h3 className="text-lg font-bold mb-1 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
               Reset your password
             </h3>
+
+            {/* Step indicator */}
+            <div className="flex items-center gap-1.5 mb-4 mt-1">
+              {(['email', 'code', 'password'] as const).map((s, i) => {
+                const active = forgotStep === s
+                const past =
+                  (forgotStep === 'code' && s === 'email') ||
+                  (forgotStep === 'password' && (s === 'email' || s === 'code'))
+                return (
+                  <div key={s} className="flex items-center gap-1.5 flex-1">
+                    <div
+                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
+                        active
+                          ? 'bg-purple-600 text-white'
+                          : past
+                            ? 'bg-green-500 text-white'
+                            : 'bg-gray-200 text-gray-500 dark:bg-gray-700'
+                      }`}
+                    >
+                      {past ? '✓' : i + 1}
+                    </div>
+                    <div
+                      className={`flex-1 h-0.5 ${
+                        i === 2
+                          ? 'invisible'
+                          : past
+                            ? 'bg-green-500'
+                            : active
+                              ? 'bg-gradient-to-r from-purple-500 to-gray-200 dark:to-gray-700'
+                              : 'bg-gray-200 dark:bg-gray-700'
+                      }`}
+                    />
+                  </div>
+                )
+              })}
+            </div>
             <p className="text-xs text-gray-500 mb-4">
               {forgotStep === 'email'
                 ? "Enter your work email and we'll send a 6-digit code."
-                : "Enter the code from your email and pick a new password."}
+                : forgotStep === 'code'
+                  ? `We sent a code to ${forgotMaskedEmail || forgotEmail}. Enter the 6 digits below.`
+                  : 'Code verified. Pick a new password.'}
             </p>
 
-            {forgotStep === 'email' ? (
+            {forgotStep === 'email' && (
               <form onSubmit={handleSendCode} className="space-y-3">
                 <input
                   type="email"
@@ -367,34 +457,23 @@ export default function LoginForm() {
                   Send code
                 </Button>
               </form>
-            ) : (
-              <form onSubmit={handleResetSubmit} className="space-y-3">
+            )}
+
+            {forgotStep === 'code' && (
+              <form onSubmit={handleVerifyCode} className="space-y-3">
                 <input
                   type="text"
                   inputMode="numeric"
                   pattern="\d*"
                   value={forgotCode}
-                  onChange={(e) => setForgotCode(e.target.value)}
-                  placeholder="6-digit code"
+                  onChange={(e) => {
+                    const digits = e.target.value.replace(/\D/g, '').slice(0, 6)
+                    setForgotCode(digits)
+                  }}
+                  placeholder="••••••"
                   maxLength={6}
-                  className="w-full px-4 py-2 rounded-lg border-2 border-purple-200 focus:border-purple-500 focus:outline-none tracking-widest text-center font-mono"
+                  className="w-full px-4 py-3 rounded-lg border-2 border-purple-200 focus:border-purple-500 focus:outline-none tracking-[0.6em] text-center font-mono text-2xl"
                   autoFocus
-                  required
-                />
-                <input
-                  type="password"
-                  value={forgotNewPassword}
-                  onChange={(e) => setForgotNewPassword(e.target.value)}
-                  placeholder="New password"
-                  className="w-full px-4 py-2 rounded-lg border-2 border-purple-200 focus:border-purple-500 focus:outline-none"
-                  required
-                />
-                <input
-                  type="password"
-                  value={forgotConfirmPassword}
-                  onChange={(e) => setForgotConfirmPassword(e.target.value)}
-                  placeholder="Confirm new password"
-                  className="w-full px-4 py-2 rounded-lg border-2 border-purple-200 focus:border-purple-500 focus:outline-none"
                   required
                 />
                 {forgotError && (
@@ -410,15 +489,65 @@ export default function LoginForm() {
                 <div className="flex gap-2">
                   <button
                     type="button"
-                    onClick={() => setForgotStep('email')}
-                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700 text-sm"
+                    onClick={resendCode}
+                    disabled={forgotLoading}
+                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700 text-sm disabled:opacity-50"
                   >
                     Resend code
                   </button>
                   <Button type="submit" isLoading={forgotLoading} className="flex-1">
-                    Reset password
+                    Verify code
                   </Button>
                 </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setForgotStep('email')
+                    setForgotCode('')
+                    setForgotError('')
+                    setForgotMessage('')
+                  }}
+                  className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 w-full text-center"
+                >
+                  ← Use a different email
+                </button>
+              </form>
+            )}
+
+            {forgotStep === 'password' && (
+              <form onSubmit={handleResetSubmit} className="space-y-3">
+                <input
+                  type="password"
+                  value={forgotNewPassword}
+                  onChange={(e) => setForgotNewPassword(e.target.value)}
+                  placeholder="New password"
+                  className="w-full px-4 py-2 rounded-lg border-2 border-purple-200 focus:border-purple-500 focus:outline-none"
+                  autoFocus
+                  required
+                  minLength={6}
+                />
+                <input
+                  type="password"
+                  value={forgotConfirmPassword}
+                  onChange={(e) => setForgotConfirmPassword(e.target.value)}
+                  placeholder="Confirm new password"
+                  className="w-full px-4 py-2 rounded-lg border-2 border-purple-200 focus:border-purple-500 focus:outline-none"
+                  required
+                  minLength={6}
+                />
+                {forgotError && (
+                  <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
+                    {forgotError}
+                  </div>
+                )}
+                {forgotMessage && (
+                  <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-lg text-sm">
+                    {forgotMessage}
+                  </div>
+                )}
+                <Button type="submit" isLoading={forgotLoading} className="w-full">
+                  Reset password
+                </Button>
               </form>
             )}
           </div>
