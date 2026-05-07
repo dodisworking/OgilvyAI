@@ -27,9 +27,11 @@ interface RequestCardProps {
   onUpdate: () => void
   /** Tim App / iPhone: bottom sheet + limited height instead of full-screen desktop modal */
   compactCalendarModal?: boolean
+  /** When set, approval is sent as Isaac with this code (used inside Isaac Mode). */
+  forceIsaacCode?: string
 }
 
-export default function RequestCard({ request, onUpdate, compactCalendarModal = false }: RequestCardProps) {
+export default function RequestCard({ request, onUpdate, compactCalendarModal = false, forceIsaacCode }: RequestCardProps) {
   const [showActions, setShowActions] = useState(false)
   const [teamContext, setTeamContext] = useState<TeamMemberSchedule[]>([])
   const [loadingContext, setLoadingContext] = useState(false)
@@ -287,6 +289,7 @@ export default function RequestCard({ request, onUpdate, compactCalendarModal = 
               
               <ApprovalActions
                 requestId={request.id}
+                forceIsaacCode={forceIsaacCode}
                 onSuccess={() => {
                   setShowActions(false)
                   onUpdate()

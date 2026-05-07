@@ -7,14 +7,16 @@ interface ApprovalActionsProps {
   requestId: string
   onSuccess: () => void
   onCancel: () => void
+  /** When set, skips the toggle UI and approves as Isaac with this code. */
+  forceIsaacCode?: string
 }
 
-export default function ApprovalActions({ requestId, onSuccess, onCancel }: ApprovalActionsProps) {
+export default function ApprovalActions({ requestId, onSuccess, onCancel, forceIsaacCode }: ApprovalActionsProps) {
   const [notes, setNotes] = useState('')
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
-  const [actAsIsaac, setActAsIsaac] = useState(false)
-  const [isaacCode, setIsaacCode] = useState('')
+  const [actAsIsaac, setActAsIsaac] = useState(Boolean(forceIsaacCode))
+  const [isaacCode, setIsaacCode] = useState(forceIsaacCode || '')
 
   const handleAction = async (status: 'APPROVED' | 'REJECTED') => {
     if (actAsIsaac && !isaacCode.trim()) {
@@ -68,40 +70,46 @@ export default function ApprovalActions({ requestId, onSuccess, onCancel }: Appr
         />
       </div>
 
-      <div className="rounded-lg border border-purple-200 dark:border-purple-700 bg-purple-50/60 dark:bg-purple-900/10 p-3">
-        <label className="flex items-center gap-2 cursor-pointer text-sm">
-          <input
-            type="checkbox"
-            checked={actAsIsaac}
-            onChange={(e) => {
-              setActAsIsaac(e.target.checked)
-              if (!e.target.checked) {
-                setIsaacCode('')
-                if (error === 'Enter the Isaac code to act as Isaac') setError('')
-              }
-            }}
-            className="h-4 w-4 text-purple-600 focus:ring-purple-500 rounded"
-          />
-          <span className="font-medium text-purple-800 dark:text-purple-200">
-            🥷 Approve as Isaac
-          </span>
-          <span className="text-xs text-gray-500">— sends decision email + invites from Isaac</span>
-        </label>
-        {actAsIsaac && (
-          <input
-            type="password"
-            inputMode="numeric"
-            value={isaacCode}
-            onChange={(e) => {
-              setIsaacCode(e.target.value)
-              if (error) setError('')
-            }}
-            placeholder="Isaac code"
-            autoFocus
-            className="mt-2 w-40 px-3 py-1.5 rounded-md border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-          />
-        )}
-      </div>
+      {forceIsaacCode ? (
+        <div className="rounded-lg border border-purple-200 dark:border-purple-700 bg-purple-50/60 dark:bg-purple-900/10 px-3 py-2 text-xs text-purple-800 dark:text-purple-200">
+          🥷 Acting as <strong>Isaac</strong> — decision email + calendar invites will be sent from Isaac.
+        </div>
+      ) : (
+        <div className="rounded-lg border border-purple-200 dark:border-purple-700 bg-purple-50/60 dark:bg-purple-900/10 p-3">
+          <label className="flex items-center gap-2 cursor-pointer text-sm">
+            <input
+              type="checkbox"
+              checked={actAsIsaac}
+              onChange={(e) => {
+                setActAsIsaac(e.target.checked)
+                if (!e.target.checked) {
+                  setIsaacCode('')
+                  if (error === 'Enter the Isaac code to act as Isaac') setError('')
+                }
+              }}
+              className="h-4 w-4 text-purple-600 focus:ring-purple-500 rounded"
+            />
+            <span className="font-medium text-purple-800 dark:text-purple-200">
+              🥷 Approve as Isaac
+            </span>
+            <span className="text-xs text-gray-500">— sends decision email + invites from Isaac</span>
+          </label>
+          {actAsIsaac && (
+            <input
+              type="password"
+              inputMode="numeric"
+              value={isaacCode}
+              onChange={(e) => {
+                setIsaacCode(e.target.value)
+                if (error) setError('')
+              }}
+              placeholder="Isaac code"
+              autoFocus
+              className="mt-2 w-40 px-3 py-1.5 rounded-md border border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+          )}
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg text-sm">

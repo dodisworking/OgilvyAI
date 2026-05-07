@@ -16,13 +16,6 @@ export async function POST(request: NextRequest) {
     const cookieHeader = request.headers.get('cookie')
     const session = await getSessionFromCookie(cookieHeader)
 
-    if (!session || !session.isAdmin) {
-      return NextResponse.json(
-        { error: 'Unauthorized - Admin access required' },
-        { status: 401 }
-      )
-    }
-
     const { requestId, status, adminNotes, approveAsIsaacCode } = await request.json()
 
     if (!requestId || !status) {
@@ -39,8 +32,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Optional override: act as Isaac for this single decision when the
-    // shared Isaac-mode code is supplied. Validated server-side.
+    // Optional override: act as Isaac for this decision when the shared
+    // Isaac-mode code is supplied. A valid code also satisfies the
+    // authorization requirement, so non-admin sessions can use it (this is
+    // how Isaac Mode lets people approve from inside the Tim view).
     let isaacOverride = false
     if (approveAsIsaacCode != null) {
       const expected = process.env.ISAAC_MODE_PASSWORD ?? '123'
@@ -51,6 +46,13 @@ export async function POST(request: NextRequest) {
         )
       }
       isaacOverride = true
+    }
+
+    if (!isaacOverride && (!session || !session.isAdmin)) {
+      return NextResponse.json(
+        { error: 'Unauthorized - Admin access required' },
+        { status: 401 }
+      )
     }
 
     // Get the request with user info

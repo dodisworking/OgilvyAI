@@ -568,6 +568,7 @@ export default function IsaacMode({ onClose }: IsaacModeProps) {
                     onRefresh={fetchAllRequests}
                     enableTeamCalendarEdit={true}
                     teamCalendarApiEndpoint="/api/isaac-mode/master-calendar"
+                    forceIsaacCode={password}
                   />
                 </div>
               )}

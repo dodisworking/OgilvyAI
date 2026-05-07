@@ -12,6 +12,8 @@ interface AdminDashboardProps {
   teamCalendarApiEndpoint?: string
   /** Tim App / small screens: tighter layout, full-height scroll */
   variant?: 'default' | 'mobile'
+  /** When set, approval is sent as Isaac with this code (used inside Isaac Mode). */
+  forceIsaacCode?: string
 }
 
 export default function AdminDashboard({
@@ -20,6 +22,7 @@ export default function AdminDashboard({
   enableTeamCalendarEdit = false,
   teamCalendarApiEndpoint,
   variant = 'default',
+  forceIsaacCode,
 }: AdminDashboardProps) {
   const isMobile = variant === 'mobile'
   const [filter, setFilter] = useState<'ALL' | 'PENDING' | 'APPROVED' | 'REJECTED'>('ALL')
@@ -168,6 +171,7 @@ export default function AdminDashboard({
               request={request}
               onUpdate={onRefresh}
               compactCalendarModal={isMobile}
+              forceIsaacCode={forceIsaacCode}
             />
           ))
         )}
