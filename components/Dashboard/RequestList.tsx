@@ -5,6 +5,7 @@ import { format } from 'date-fns'
 import { Request } from '@/types'
 import StatusBadge from './StatusBadge'
 import EditRequestForm from './EditRequestForm'
+import AisaacShareButton from './AisaacShareButton'
 
 interface RequestListProps {
   requests: Request[]
@@ -123,7 +124,7 @@ export default function RequestList({ requests, onUpdate }: RequestListProps) {
           )}
 
           {/* Action Buttons */}
-          <div className="flex gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+          <div className="flex flex-wrap gap-2 mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
             <button
               onClick={() => handleEdit(request)}
               className="px-4 py-2 rounded-lg border border-purple-300 dark:border-purple-700 bg-purple-50 dark:bg-purple-900/20 text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/40 transition-all font-medium text-sm"
@@ -137,6 +138,11 @@ export default function RequestList({ requests, onUpdate }: RequestListProps) {
             >
               {deletingRequestId === request.id ? 'Deleting...' : 'Delete'}
             </button>
+            {request.status === 'APPROVED' && (
+              <div className="ml-auto">
+                <AisaacShareButton request={request} onShared={onUpdate} />
+              </div>
+            )}
           </div>
 
           <p className="text-xs text-gray-500 dark:text-gray-500 mt-2">
