@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import Button from '../UI/Button'
+import { compressProfileImage } from '@/lib/compressImage'
 
 interface ProfileSetupPromptProps {
   userName: string
@@ -17,28 +18,27 @@ export default function ProfileSetupPrompt({ userName, onComplete, onSkip }: Pro
   const [isLoading, setIsLoading] = useState(false)
   const fileInputRef = useRef<HTMLInputElement>(null)
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
-      if (!validTypes.includes(file.type)) {
-        setError('Please upload an image file (JPEG, PNG, GIF, or WebP)')
-        return
-      }
+    if (!file) return
 
-      if (file.size > 2 * 1024 * 1024) {
-        setError('File size must be less than 2MB')
-        return
-      }
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      setError('Please upload an image file (JPEG, PNG, GIF, or WebP)')
+      return
+    }
 
-      setProfilePicture(file)
-      setError('')
+    setError('')
 
+    try {
+      const compressed = await compressProfileImage(file)
+      setProfilePicture(compressed)
       const reader = new FileReader()
-      reader.onloadend = () => {
-        setProfilePicturePreview(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+      reader.onloadend = () => setProfilePicturePreview(reader.result as string)
+      reader.readAsDataURL(compressed)
+    } catch (err) {
+      console.error('Image compression failed:', err)
+      setError('Could not process that image. Try a different one.')
     }
   }
 

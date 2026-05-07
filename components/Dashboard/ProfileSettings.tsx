@@ -2,6 +2,7 @@
 
 import { useState, useRef } from 'react'
 import Button from '../UI/Button'
+import { compressProfileImage } from '@/lib/compressImage'
 
 interface ProfileSettingsProps {
   user: {
@@ -41,19 +42,15 @@ export default function ProfileSettings({ user, onClose, onProfileUpdate }: Prof
       return
     }
 
-    // Validate file size (max 2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      setUploadError('Image must be less than 2MB')
-      return
-    }
-
     setIsUploading(true)
     setUploadError('')
 
     try {
+      const compressed = await compressProfileImage(file)
+
       // Upload file to get base64 URL
       const formData = new FormData()
-      formData.append('file', file)
+      formData.append('file', compressed)
 
       const uploadResponse = await fetch('/api/upload/profile', {
         method: 'POST',

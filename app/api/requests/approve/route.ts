@@ -9,6 +9,7 @@ import {
 } from '@/lib/email'
 
 const ADMIN_PORTAL_COOKIE = 'admin_portal_user'
+const ISAAC_APPROVER = { name: 'Isaac Boruchowicz', email: 'isaac.boruchowicz@ogilvy.com' }
 
 export async function POST(request: NextRequest) {
   try {
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { requestId, status, adminNotes } = await request.json()
+    const { requestId, status, adminNotes, approveAsIsaacCode } = await request.json()
 
     if (!requestId || !status) {
       return NextResponse.json(
@@ -36,6 +37,20 @@ export async function POST(request: NextRequest) {
         { error: 'Invalid status. Must be APPROVED or REJECTED' },
         { status: 400 }
       )
+    }
+
+    // Optional override: act as Isaac for this single decision when the
+    // shared Isaac-mode code is supplied. Validated server-side.
+    let isaacOverride = false
+    if (approveAsIsaacCode != null) {
+      const expected = process.env.ISAAC_MODE_PASSWORD ?? '123'
+      if (String(approveAsIsaacCode) !== expected) {
+        return NextResponse.json(
+          { error: 'Invalid Isaac code' },
+          { status: 401 }
+        )
+      }
+      isaacOverride = true
     }
 
     // Get the request with user info
@@ -77,11 +92,7 @@ export async function POST(request: NextRequest) {
 
     // Send one threaded confirmation email to employee, with Tim + Isaac copied
     try {
-      const portal = request.cookies.get(ADMIN_PORTAL_COOKIE)?.value === 'jess' ? 'jess' : 'tim'
-      const approver =
-        portal === 'jess'
-          ? { name: 'Jessica Coccaro', email: 'jessica.coccaro@ogilvy.com' }
-          : { name: 'Tim Legallo', email: 'tim.legallo@ogilvy.com' }
+      const approver = pickApprover(request, isaacOverride)
 
       await sendRequestDecisionToEmployee({
         requestId: requestId,
@@ -111,11 +122,7 @@ export async function POST(request: NextRequest) {
           requestData.requestType
         )
         if (notifyEmails.length > 0 && ranges.length > 0) {
-          const portal = request.cookies.get(ADMIN_PORTAL_COOKIE)?.value === 'jess' ? 'jess' : 'tim'
-          const approver =
-            portal === 'jess'
-              ? { name: 'Jessica Coccaro', email: 'jessica.coccaro@ogilvy.com' }
-              : { name: 'Tim Legallo', email: 'tim.legallo@ogilvy.com' }
+          const approver = pickApprover(request, isaacOverride)
 
           await sendApprovedTimeOffCalendarInvite({
             requestId: requestId,
@@ -141,6 +148,14 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+function pickApprover(request: NextRequest, isaacOverride: boolean) {
+  if (isaacOverride) return ISAAC_APPROVER
+  const portal = request.cookies.get(ADMIN_PORTAL_COOKIE)?.value === 'jess' ? 'jess' : 'tim'
+  return portal === 'jess'
+    ? { name: 'Jessica Coccaro', email: 'jessica.coccaro@ogilvy.com' }
+    : { name: 'Tim Legallo', email: 'tim.legallo@ogilvy.com' }
 }
 
 function parseNotifyEmails(raw: unknown): NotifyEmailEntry[] {

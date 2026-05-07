@@ -21,11 +21,12 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Validate file size (max 2MB for base64 storage)
-    const maxSize = 2 * 1024 * 1024 // 2MB
+    // The client compresses profile pictures before upload, so we keep only a
+    // generous safety cap to reject obvious abuse (uncompressed RAW, etc.).
+    const maxSize = 10 * 1024 * 1024
     if (file.size > maxSize) {
       return NextResponse.json(
-        { error: 'File size too large. Maximum size is 2MB' },
+        { error: 'File is unusually large even after compression. Try a different image.' },
         { status: 400 }
       )
     }

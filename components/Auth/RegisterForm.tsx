@@ -3,6 +3,7 @@
 import { useState, useRef } from 'react'
 import { useRouter } from 'next/navigation'
 import Button from '../UI/Button'
+import { compressProfileImage } from '@/lib/compressImage'
 
 export default function RegisterForm() {
   const [name, setName] = useState('')
@@ -17,31 +18,28 @@ export default function RegisterForm() {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const router = useRouter()
 
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
-    if (file) {
-      // Validate file type
-      const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
-      if (!validTypes.includes(file.type)) {
-        setError('Please upload an image file (JPEG, PNG, GIF, or WebP)')
-        return
-      }
+    if (!file) return
 
-      // Validate file size (max 2MB to match API limit)
-      if (file.size > 2 * 1024 * 1024) {
-        setError('File size must be less than 2MB')
-        return
-      }
+    const validTypes = ['image/jpeg', 'image/jpg', 'image/png', 'image/gif', 'image/webp']
+    if (!validTypes.includes(file.type)) {
+      setError('Please upload an image file (JPEG, PNG, GIF, or WebP)')
+      return
+    }
 
-      setProfilePicture(file)
-      setError('')
+    setError('')
 
-      // Create preview
+    try {
+      const compressed = await compressProfileImage(file)
+      setProfilePicture(compressed)
+
       const reader = new FileReader()
-      reader.onloadend = () => {
-        setProfilePicturePreview(reader.result as string)
-      }
-      reader.readAsDataURL(file)
+      reader.onloadend = () => setProfilePicturePreview(reader.result as string)
+      reader.readAsDataURL(compressed)
+    } catch (err) {
+      console.error('Image compression failed:', err)
+      setError('Could not process that image. Try a different one.')
     }
   }
 
