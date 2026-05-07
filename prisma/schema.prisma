@@ -70,6 +70,7 @@ model Request {
   title        String?
   dayBreakdown Json?
   notifyEmails Json?
+  pendingCancelRanges Json?
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("requests")

@@ -592,7 +592,12 @@ interface BuildIcsOptions {
   ranges: IcsRange[]
   subjectPersonName: string
   uidSeed: string
+  method?: 'REQUEST' | 'CANCEL'
+  sequence?: number
 }
+
+const stableUidFor = (uidSeed: string, attendeeEmail: string, rangeIndex: number) =>
+  `timtheman-${uidSeed}-${attendeeEmail.toLowerCase()}-r${rangeIndex}@timtheman`
 
 export function buildIcsCalendarInvite({
   organizerName,
@@ -601,6 +606,8 @@ export function buildIcsCalendarInvite({
   ranges,
   subjectPersonName,
   uidSeed,
+  method = 'REQUEST',
+  sequence = 0,
 }: BuildIcsOptions) {
   const dtstamp = formatIcsUtcStamp(new Date())
 
@@ -609,7 +616,7 @@ export function buildIcsCalendarInvite({
     'VERSION:2.0',
     'PRODID:-//Tim The Man//Time Off Calendar//EN',
     'CALSCALE:GREGORIAN',
-    'METHOD:REQUEST',
+    `METHOD:${method}`,
   ]
 
   ranges.forEach((range, idx) => {
@@ -627,7 +634,11 @@ export function buildIcsCalendarInvite({
     const start = new Date(range.startDate)
     start.setHours(0, 0, 0, 0)
 
-    const uid = `timtheman-${uidSeed}-${idx}-${formatIcsDate(start)}@timtheman`
+    // Stable UID per (request, attendee, range index). Same UID across edits
+    // so a follow-up CANCEL or REQUEST with bumped SEQUENCE actually targets
+    // the existing event in Outlook.
+    const primaryAttendee = attendees[0]?.email || 'noattendee'
+    const uid = stableUidFor(uidSeed, primaryAttendee, idx)
 
     lines.push('BEGIN:VEVENT')
     lines.push(`UID:${uid}`)
@@ -642,9 +653,9 @@ export function buildIcsCalendarInvite({
     lines.push('X-MICROSOFT-CDO-INTENDEDSTATUS:FREE')
     lines.push('X-MICROSOFT-CDO-ALLDAYEVENT:TRUE')
     lines.push('X-MICROSOFT-CDO-IMPORTANCE:1')
-    lines.push('STATUS:CONFIRMED')
+    lines.push(method === 'CANCEL' ? 'STATUS:CANCELLED' : 'STATUS:CONFIRMED')
     lines.push('CLASS:PUBLIC')
-    lines.push('SEQUENCE:0')
+    lines.push(`SEQUENCE:${sequence}`)
     lines.push(
       `ORGANIZER;CN=${escapeIcsText(organizerName)}:mailto:${organizerEmail}`
     )
@@ -676,6 +687,8 @@ export interface SendApprovedTimeOffInviteData {
   notifyEmails: NotifyEmailEntry[]
   approvedByName?: string
   approvedByEmail?: string
+  sequence?: number
+  method?: 'REQUEST' | 'CANCEL'
 }
 
 export async function sendApprovedTimeOffCalendarInvite(
@@ -734,6 +747,9 @@ export async function sendApprovedTimeOffCalendarInvite(
   // them as the ATTENDEE, which is what Outlook expects for an inline invite.
   const subject = `${data.employeeName} – Time Off / Work Remote`
 
+  const method = data.method ?? 'REQUEST'
+  const sequence = data.sequence ?? 0
+
   const sendPromises = attendees.map(async (a) => {
     try {
       const ics = buildIcsCalendarInvite({
@@ -742,35 +758,41 @@ export async function sendApprovedTimeOffCalendarInvite(
         attendees: [a],
         ranges: data.ranges,
         subjectPersonName: data.employeeName,
-        uidSeed: `${data.requestId}-${a.email.toLowerCase()}`,
+        uidSeed: data.requestId,
+        method,
+        sequence,
       })
+
+      const cancelSubject = `Cancelled: ${subject}`
+      const cancelHtml = `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+          <h2 style="color: #333;">Plans changed — cancelling these days</h2>
+          <p>${data.employeeName}'s previously scheduled time off has been replaced. Outlook should remove the old event from your calendar automatically. A fresh invite for the new dates will follow.</p>
+          <div style="background:#f9f9f9; padding:14px; border-radius:8px; margin:16px 0;">${rangeSummary}</div>
+        </div>
+      `
 
       await transporter.sendMail({
         from: `"${organizerName}" <${GMAIL_USER}>`,
         to: a.email,
-        subject,
-        html,
-        // Outlook-friendly structure:
-        //   - text/html body (the human-readable note)
-        //   - text/calendar; method=REQUEST as a multipart/alternative part
-        //   - .ics attachment as a fallback for clients that ignore the alt part
+        subject: method === 'CANCEL' ? cancelSubject : subject,
+        html: method === 'CANCEL' ? cancelHtml : html,
         alternatives: [
           {
-            contentType: 'text/calendar; charset="UTF-8"; method=REQUEST',
+            contentType: `text/calendar; charset="UTF-8"; method=${method}`,
             content: ics,
             contentTransferEncoding: '7bit',
           },
         ],
         attachments: [
           {
-            filename: 'invite.ics',
+            filename: method === 'CANCEL' ? 'cancel.ics' : 'invite.ics',
             content: ics,
-            contentType: 'application/ics; name="invite.ics"',
+            contentType: `application/ics; name="${method === 'CANCEL' ? 'cancel' : 'invite'}.ics"`,
             contentDisposition: 'attachment',
           },
         ],
         headers: {
-          // Outlook-specific signal that this message is a calendar invite.
           'Content-Class': 'urn:content-classes:calendarmessage',
         },
       } as any)

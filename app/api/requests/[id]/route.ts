@@ -136,6 +136,24 @@ export async function PUT(
       ? dayBreakdown
       : undefined
 
+    // Snapshot the previous date ranges so on the next approval we can send
+    // CANCEL invites for the old days before the new ones go out.
+    // Only snapshot when this request was previously approved (and had calendar
+    // invites sent) — pending edits don't need cancellation.
+    const datesActuallyChanged =
+      existingRequest.startDate.getTime() !== parsedStartDate.getTime() ||
+      existingRequest.endDate.getTime() !== parsedEndDate.getTime() ||
+      JSON.stringify(existingRequest.dayBreakdown) !== JSON.stringify(formattedDayBreakdown ?? existingRequest.dayBreakdown)
+    const shouldSnapshot = existingRequest.status === 'APPROVED' && datesActuallyChanged
+    const previousRangesSnapshot = shouldSnapshot
+      ? snapshotRequestRanges(
+          existingRequest.dayBreakdown,
+          existingRequest.startDate,
+          existingRequest.endDate,
+          existingRequest.requestType
+        )
+      : null
+
     const updatedRequest = await db.request.update({
       where: { id: requestId },
       data: {
@@ -151,6 +169,9 @@ export async function PUT(
                 ? (sanitizedNotifyEmails as unknown as Prisma.InputJsonValue)
                 : Prisma.JsonNull,
             }
+          : {}),
+        ...(previousRangesSnapshot
+          ? { pendingCancelRanges: previousRangesSnapshot as unknown as Prisma.InputJsonValue }
           : {}),
         status: 'PENDING', // Reset to PENDING when edited
         adminNotes: null, // Clear admin notes when resubmitted
@@ -195,6 +216,61 @@ export async function PUT(
       { status: 500 }
     )
   }
+}
+
+function snapshotRequestRanges(
+  dayBreakdown: unknown,
+  startDate: Date,
+  endDate: Date,
+  requestType: string
+): Array<{ startDate: string; endDate: string; type: 'TIME_OFF' | 'WFH' }> {
+  const breakdown =
+    dayBreakdown && typeof dayBreakdown === 'object' && !Array.isArray(dayBreakdown)
+      ? (dayBreakdown as Record<string, string>)
+      : null
+
+  const parseLocalDateKey = (key: string) => {
+    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key)
+    if (!m) return null
+    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0)
+  }
+
+  if (breakdown && Object.keys(breakdown).length > 0) {
+    const entries = Object.entries(breakdown)
+      .map(([key, type]) => {
+        const date = parseLocalDateKey(key)
+        if (!date) return null
+        const t = type === 'TIME_OFF' || type === 'WFH' ? type : null
+        if (!t) return null
+        return { date, type: t as 'TIME_OFF' | 'WFH' }
+      })
+      .filter((e): e is { date: Date; type: 'TIME_OFF' | 'WFH' } => e !== null)
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+
+    const ranges: Array<{ startDate: string; endDate: string; type: 'TIME_OFF' | 'WFH' }> = []
+    let current: { startDate: Date; endDate: Date; type: 'TIME_OFF' | 'WFH' } | null = null
+    for (const { date, type } of entries) {
+      if (
+        current &&
+        current.type === type &&
+        (date.getTime() - current.endDate.getTime()) / (1000 * 60 * 60 * 24) === 1
+      ) {
+        current.endDate = date
+      } else {
+        if (current) {
+          ranges.push({ startDate: current.startDate.toISOString(), endDate: current.endDate.toISOString(), type: current.type })
+        }
+        current = { startDate: date, endDate: date, type }
+      }
+    }
+    if (current) {
+      ranges.push({ startDate: current.startDate.toISOString(), endDate: current.endDate.toISOString(), type: current.type })
+    }
+    return ranges
+  }
+
+  const type: 'TIME_OFF' | 'WFH' = requestType === 'WFH' ? 'WFH' : 'TIME_OFF'
+  return [{ startDate: new Date(startDate).toISOString(), endDate: new Date(endDate).toISOString(), type }]
 }
 
 function sanitizeNotifyEmails(raw: unknown): { name?: string; email: string }[] {
