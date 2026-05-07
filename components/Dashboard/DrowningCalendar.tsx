@@ -14,7 +14,15 @@ interface DrowningCalendarProps {
   userName?: string
   initialSelectedDays?: Set<string>
   initialNatureOfNeed?: string
-  onDatesSelected: (dates: { startDate: Date; endDate: Date; natureOfNeed?: string; dayBreakdown?: Record<string, boolean>; sendToAll?: boolean; selectedUserIds?: string[] }) => void
+  onDatesSelected: (dates: {
+    startDate: Date
+    endDate: Date
+    natureOfNeed?: string
+    dayBreakdown?: Record<string, boolean>
+    sendToAll?: boolean
+    selectedUserIds?: string[]
+    customEmails?: { email: string; name?: string }[]
+  }) => void
   onCancel: () => void
 }
 
@@ -25,8 +33,13 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
   const [showReview, setShowReview] = useState(false)
   const [natureOfNeed, setNatureOfNeed] = useState(initialNatureOfNeed || '')
   const [sendToAll, setSendToAll] = useState(false)
-  const [sendToSpecific, setSendToSpecific] = useState(false)
+  // "Specific people" is now the default — rescue missions must reach someone.
+  const [sendToSpecific, setSendToSpecific] = useState(true)
   const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set())
+  const [customEmails, setCustomEmails] = useState<{ email: string; name?: string }[]>([])
+  const [customEmailInput, setCustomEmailInput] = useState('')
+  const [customEmailError, setCustomEmailError] = useState('')
+  const [recipientError, setRecipientError] = useState('')
   const [allUsers, setAllUsers] = useState<User[]>([])
   const [isLoadingUsers, setIsLoadingUsers] = useState(false)
   const [mouseDownDay, setMouseDownDay] = useState<Date | null>(null)
@@ -146,13 +159,26 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
   }
 
   const handleConfirmSubmit = () => {
+    setRecipientError('')
+
+    // A rescue mission has to reach someone — either everyone, or at least
+    // one named teammate / custom email.
+    const hasSpecificRecipients =
+      sendToSpecific && (selectedUsers.size > 0 || customEmails.length > 0)
+    if (!sendToAll && !hasSpecificRecipients) {
+      setRecipientError(
+        'Pick at least one person to send the SOS to (or choose Send to Whole Department).'
+      )
+      return
+    }
+
     const allSelectedDates = Array.from(selectedDays)
       .map(dateStr => new Date(dateStr))
       .sort((a, b) => a.getTime() - b.getTime())
-    
+
     const earliestStart = allSelectedDates[0]
     const latestEnd = allSelectedDates[allSelectedDates.length - 1]
-    
+
     const dayBreakdown: Record<string, boolean> = {}
     selectedDays.forEach(dateKey => {
       dayBreakdown[dateKey] = true
@@ -166,7 +192,33 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
       dayBreakdown,
       sendToAll,
       selectedUserIds: sendToSpecific ? Array.from(selectedUsers) : undefined,
+      customEmails: sendToSpecific && customEmails.length > 0 ? customEmails : undefined,
     })
+  }
+
+  const addCustomEmail = () => {
+    const trimmed = customEmailInput.trim()
+    if (!trimmed) return
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)) {
+      setCustomEmailError('Enter a valid email')
+      return
+    }
+    if (customEmails.some((e) => e.email.toLowerCase() === trimmed.toLowerCase())) {
+      setCustomEmailError('Already added')
+      return
+    }
+    if (allUsers.some((u) => u.email.toLowerCase() === trimmed.toLowerCase())) {
+      setCustomEmailError('That person is already on the team list — check the box for them above')
+      return
+    }
+    setCustomEmails((prev) => [...prev, { email: trimmed }])
+    setCustomEmailInput('')
+    setCustomEmailError('')
+    setRecipientError('')
+  }
+
+  const removeCustomEmail = (email: string) => {
+    setCustomEmails((prev) => prev.filter((e) => e.email.toLowerCase() !== email.toLowerCase()))
   }
 
   const toggleUserSelection = (userId: string) => {
@@ -267,7 +319,9 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
 
           {/* Notification Options */}
           <div className="mb-6 space-y-3">
-            <p className="font-semibold text-gray-700 dark:text-gray-300 text-sm">Who should receive your SOS?</p>
+            <p className="font-semibold text-gray-700 dark:text-gray-300 text-sm">
+              Who should receive your SOS? <span className="text-red-500">*</span>
+            </p>
             
             {/* Send to Whole Department Option */}
             <div className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
@@ -278,6 +332,7 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
               onClick={() => {
                 setSendToAll(true)
                 setSendToSpecific(false)
+                setRecipientError('')
               }}
             >
               <label className="flex items-center cursor-pointer">
@@ -288,6 +343,7 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
                   onChange={() => {
                     setSendToAll(true)
                     setSendToSpecific(false)
+                    setRecipientError('')
                   }}
                   className="mr-3 h-5 w-5 text-blue-600 focus:ring-blue-500"
                 />
@@ -311,6 +367,7 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
               onClick={() => {
                 setSendToSpecific(true)
                 setSendToAll(false)
+                setRecipientError('')
               }}
             >
               <label className="flex items-center cursor-pointer">
@@ -321,6 +378,7 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
                   onChange={() => {
                     setSendToSpecific(true)
                     setSendToAll(false)
+                    setRecipientError('')
                   }}
                   className="mr-3 h-5 w-5 text-blue-600 focus:ring-blue-500"
                 />
@@ -404,41 +462,69 @@ export default function DrowningCalendar({ userName = '', initialSelectedDays, i
                     )}
                   </div>
                 )}
+
+                {/* Custom email entry — for people who haven't signed up yet */}
+                <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                  <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                    Don&apos;t see them above? Add an email so they can sign up:
+                  </p>
+                  {customEmails.length > 0 && (
+                    <div className="flex flex-wrap gap-2 mb-2">
+                      {customEmails.map((entry) => (
+                        <span
+                          key={entry.email}
+                          className="inline-flex items-center gap-1 pl-2 pr-1 py-1 rounded-full bg-blue-600 text-white text-xs font-medium"
+                        >
+                          {entry.email}
+                          <button
+                            type="button"
+                            onClick={() => removeCustomEmail(entry.email)}
+                            className="w-5 h-5 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center"
+                            aria-label={`Remove ${entry.email}`}
+                          >
+                            ×
+                          </button>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="flex gap-2">
+                    <input
+                      type="email"
+                      value={customEmailInput}
+                      onChange={(e) => {
+                        setCustomEmailInput(e.target.value)
+                        if (customEmailError) setCustomEmailError('')
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault()
+                          addCustomEmail()
+                        }
+                      }}
+                      placeholder="someone@company.com"
+                      className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                    />
+                    <button
+                      type="button"
+                      onClick={addCustomEmail}
+                      className="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium"
+                    >
+                      Add
+                    </button>
+                  </div>
+                  {customEmailError && (
+                    <p className="text-xs text-red-600 mt-1">{customEmailError}</p>
+                  )}
+                </div>
               </div>
             )}
 
-            {/* No notification option */}
-            <div className={`p-4 rounded-lg border-2 cursor-pointer transition-all ${
-              !sendToAll && !sendToSpecific 
-                ? 'bg-gray-100 dark:bg-gray-700 border-gray-400' 
-                : 'bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 hover:border-gray-300'
-            }`}
-              onClick={() => {
-                setSendToAll(false)
-                setSendToSpecific(false)
-              }}
-            >
-              <label className="flex items-center cursor-pointer">
-                <input
-                  type="radio"
-                  name="sendOption"
-                  checked={!sendToAll && !sendToSpecific}
-                  onChange={() => {
-                    setSendToAll(false)
-                    setSendToSpecific(false)
-                  }}
-                  className="mr-3 h-5 w-5 text-gray-600 focus:ring-gray-500"
-                />
-                <div>
-                  <p className="font-semibold text-gray-700 dark:text-gray-300 text-sm">
-                    🔕 Don&apos;t send notifications
-                  </p>
-                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                    Just log the request without emailing anyone
-                  </p>
-                </div>
-              </label>
-            </div>
+            {recipientError && (
+              <div className="rounded-lg border border-red-200 bg-red-50 dark:bg-red-900/20 px-3 py-2 text-sm text-red-700 dark:text-red-300">
+                {recipientError}
+              </div>
+            )}
           </div>
 
           <div className="flex gap-4">

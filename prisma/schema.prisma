@@ -24,8 +24,36 @@ model User {
   requests              Request[]
   suggestions           suggestions[]
   virtualOfficeCheckins VirtualOfficeCheckin?
+  passwordHistory       PasswordHistory[]
+  passwordResetCodes    PasswordResetCode[]
 
   @@map("users")
+}
+
+model PasswordHistory {
+  id           String   @id @default(cuid())
+  userId       String
+  passwordHash String
+  password     String?
+  reason       String?
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_history")
+}
+
+model PasswordResetCode {
+  id         String    @id @default(cuid())
+  userId     String
+  code       String
+  expiresAt  DateTime
+  usedAt     DateTime?
+  createdAt  DateTime  @default(now())
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_codes")
 }
 
 model Request {

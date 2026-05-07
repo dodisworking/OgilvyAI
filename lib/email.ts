@@ -514,6 +514,41 @@ export async function sendRequestDecisionNotificationToTim(data: RequestDecision
   }
 }
 
+export interface PasswordResetCodeEmailData {
+  toName: string
+  toEmail: string
+  code: string
+  expiresInMinutes: number
+}
+
+export async function sendPasswordResetCodeEmail(data: PasswordResetCodeEmailData) {
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
+    console.error('Gmail credentials not configured - cannot send reset code')
+    throw new Error('Email service not configured')
+  }
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 24px;">
+      <h2 style="color: #333; margin-bottom: 12px;">Your password reset code</h2>
+      <p>Hi ${data.toName || 'there'},</p>
+      <p>Use the code below to reset your TimTheMan password. It expires in <strong>${data.expiresInMinutes} minutes</strong>.</p>
+      <div style="margin: 24px 0; padding: 16px 20px; background: linear-gradient(135deg, #9333ea 0%, #ec4899 100%); border-radius: 12px; text-align: center;">
+        <div style="font-family: 'SFMono-Regular', Menlo, Consolas, monospace; font-size: 36px; letter-spacing: 8px; color: white; font-weight: bold;">
+          ${data.code}
+        </div>
+      </div>
+      <p style="color: #666; font-size: 13px;">If you didn't ask to reset your password, you can safely ignore this email — your current password still works.</p>
+    </div>
+  `
+
+  await transporter.sendMail({
+    from: `"Tim's Production Wizard" <${GMAIL_USER}>`,
+    to: data.toEmail,
+    subject: `Your TimTheMan password reset code: ${data.code}`,
+    html,
+  })
+}
+
 // ----- Calendar invite (.ics) helpers -----
 
 const pad = (n: number) => n.toString().padStart(2, '0')

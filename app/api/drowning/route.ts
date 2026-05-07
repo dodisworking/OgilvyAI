@@ -54,7 +54,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { startDate, endDate, natureOfNeed, dayBreakdown, sendToAll, selectedUserIds } = await request.json()
+    const { startDate, endDate, natureOfNeed, dayBreakdown, sendToAll, selectedUserIds, customEmails } = await request.json()
 
     // Validation
     if (!startDate || !endDate) {
@@ -100,11 +100,23 @@ export async function POST(request: NextRequest) {
       },
     })
 
+    // Sanitize any custom emails — these are people who haven't signed up.
+    const sanitizedCustomEmails: { email: string; name?: string }[] = []
+    if (Array.isArray(customEmails)) {
+      for (const entry of customEmails) {
+        const email = typeof entry?.email === 'string' ? entry.email.trim() : ''
+        if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue
+        const name = typeof entry?.name === 'string' ? entry.name : undefined
+        sanitizedCustomEmails.push({ email, name })
+      }
+    }
+
     // Send notifications if requested
-    if (sendToAll || (selectedUserIds && selectedUserIds.length > 0)) {
+    const hasSelected = Array.isArray(selectedUserIds) && selectedUserIds.length > 0
+    if (sendToAll || hasSelected || sanitizedCustomEmails.length > 0) {
       try {
         let usersToNotify: { id: string; name: string; email: string }[]
-        
+
         if (sendToAll) {
           // Get all users
           usersToNotify = await db.user.findMany({
@@ -114,7 +126,7 @@ export async function POST(request: NextRequest) {
               email: true,
             },
           })
-        } else {
+        } else if (hasSelected) {
           // Get only selected users
           usersToNotify = await db.user.findMany({
             where: {
@@ -126,7 +138,21 @@ export async function POST(request: NextRequest) {
               email: true,
             },
           })
+        } else {
+          usersToNotify = []
         }
+
+        // Merge in custom emails (for people who don't have accounts yet),
+        // de-duplicating against the user list.
+        const known = new Set(usersToNotify.map((u) => u.email.toLowerCase()))
+        const customRecipients = sanitizedCustomEmails
+          .filter((e) => !known.has(e.email.toLowerCase()))
+          .map((e) => ({
+            id: `custom:${e.email.toLowerCase()}`,
+            name: e.name || e.email,
+            email: e.email,
+          }))
+        usersToNotify = [...usersToNotify, ...customRecipients]
 
         if (usersToNotify.length > 0) {
           // Import email function
@@ -148,11 +174,14 @@ export async function POST(request: NextRequest) {
             baseUrl,
           })
 
-          // Update the request with notified users
+          // Update the request with notified users — only real user IDs;
+          // custom emails are people without accounts yet.
           await db.drowningRequest.update({
             where: { id: newDrowningRequest.id },
             data: {
-              notifiedUsers: usersToNotify.map(u => u.id),
+              notifiedUsers: usersToNotify
+                .map((u) => u.id)
+                .filter((id) => !id.startsWith('custom:')),
             },
           })
         }

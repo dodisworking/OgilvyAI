@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
-import { comparePassword, hashPassword } from '@/lib/auth'
+import { comparePassword } from '@/lib/auth'
 import { getSessionFromCookie } from '@/lib/session'
+import { setUserPasswordWithHistory } from '@/lib/passwordHistory'
 
 export async function POST(request: NextRequest) {
   try {
@@ -45,14 +46,10 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Update password
-    const passwordHash = await hashPassword(newPassword)
-    await db.user.update({
-      where: { id: user.id },
-      data: { 
-        passwordHash,
-        password: newPassword, // Store plain text for Isaac Mode
-      },
+    await setUserPasswordWithHistory({
+      userId: user.id,
+      newPassword,
+      reason: 'change-password',
     })
 
     return NextResponse.json({ message: 'Password updated successfully' })

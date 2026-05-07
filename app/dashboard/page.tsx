@@ -585,6 +585,8 @@ export default function Dashboard() {
                       natureOfNeed: data.natureOfNeed,
                       dayBreakdown: data.dayBreakdown,
                       sendToAll: data.sendToAll,
+                      selectedUserIds: data.selectedUserIds,
+                      customEmails: data.customEmails,
                     }),
                   })
 

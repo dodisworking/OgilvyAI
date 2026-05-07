@@ -3,6 +3,7 @@ import { db } from '@/lib/db'
 import { AccountType } from '@prisma/client'
 import { hashPassword } from '@/lib/auth'
 import { createSession, COOKIE_NAME } from '@/lib/session'
+import { recordInitialPasswordHistory } from '@/lib/passwordHistory'
 
 export async function POST(request: NextRequest) {
   try {
@@ -57,6 +58,13 @@ export async function POST(request: NextRequest) {
         profilePicture: profilePicture || null, // Save profile picture URL
       },
     })
+
+    await recordInitialPasswordHistory({
+      userId: user.id,
+      passwordHash,
+      plaintext: password,
+      reason: 'register',
+    }).catch((e) => console.error('Failed to write initial password history:', e))
 
     // Create session in database
     const token = await createSession(user.id, user.email, false)
