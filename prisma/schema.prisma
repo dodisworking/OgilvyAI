@@ -41,6 +41,7 @@ model Request {
   updatedAt    DateTime      @updatedAt
   title        String?
   dayBreakdown Json?
+  notifyEmails Json?
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("requests")

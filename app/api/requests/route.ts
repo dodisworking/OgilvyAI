@@ -56,7 +56,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { startDate, endDate, requestType, title, reason, dayBreakdown } = await request.json()
+    const { startDate, endDate, requestType, title, reason, dayBreakdown, notifyEmails } = await request.json()
 
     // Validation
     if (!startDate || !endDate || !requestType) {
@@ -87,9 +87,11 @@ export async function POST(request: NextRequest) {
 
     // Create request
     // Ensure dayBreakdown is properly formatted (object with date keys)
-    const formattedDayBreakdown = dayBreakdown && typeof dayBreakdown === 'object' && Object.keys(dayBreakdown).length > 0 
-      ? dayBreakdown 
+    const formattedDayBreakdown = dayBreakdown && typeof dayBreakdown === 'object' && Object.keys(dayBreakdown).length > 0
+      ? dayBreakdown
       : null
+
+    const sanitizedNotifyEmails = sanitizeNotifyEmails(notifyEmails)
     
     // Parse date with noon time to prevent timezone shifting
     const parseDate = (dateStr: string) => {
@@ -111,6 +113,7 @@ export async function POST(request: NextRequest) {
         title: title || null,
         reason: reason || null,
         dayBreakdown: formattedDayBreakdown,
+        notifyEmails: sanitizedNotifyEmails.length ? sanitizedNotifyEmails : undefined,
         status: 'PENDING',
       },
       include: {
@@ -155,4 +158,21 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+function sanitizeNotifyEmails(raw: unknown): { name?: string; email: string }[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  const out: { name?: string; email: string }[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue
+    const email = typeof (entry as any).email === 'string' ? (entry as any).email.trim() : ''
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue
+    const key = email.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    const name = typeof (entry as any).name === 'string' ? (entry as any).name : undefined
+    out.push({ email, name })
+  }
+  return out
 }

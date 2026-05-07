@@ -160,6 +160,7 @@ export default function AdminPage() {
     title?: string
     reason?: string
     dayBreakdown?: Record<string, 'TIME_OFF' | 'WFH'>
+    notifyEmails?: { email: string; name?: string }[]
   }[]) => {
     setIsSubmitting(true)
     try {
@@ -175,6 +176,7 @@ export default function AdminPage() {
             title: range.title || null,
             reason: range.reason || null,
             dayBreakdown: range.dayBreakdown && Object.keys(range.dayBreakdown).length > 0 ? range.dayBreakdown : null,
+            notifyEmails: range.notifyEmails && range.notifyEmails.length > 0 ? range.notifyEmails : null,
           }),
         })
         return { ok: response.ok, status: response.status, response }

@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSessionFromCookie } from '@/lib/session'
-import { sendRequestDecisionToEmployee } from '@/lib/email'
+import {
+  sendRequestDecisionToEmployee,
+  sendApprovedTimeOffCalendarInvite,
+  IcsRange,
+  NotifyEmailEntry,
+} from '@/lib/email'
 
 const ADMIN_PORTAL_COOKIE = 'admin_portal_user'
 
@@ -95,6 +100,39 @@ export async function POST(request: NextRequest) {
       // Don't fail the update if email fails
     }
 
+    // On approval, send calendar invites to anyone the requester chose to notify
+    if (status === 'APPROVED') {
+      try {
+        const notifyEmails = parseNotifyEmails(requestData.notifyEmails)
+        const ranges = buildIcsRanges(
+          requestData.dayBreakdown,
+          requestData.startDate,
+          requestData.endDate,
+          requestData.requestType
+        )
+        if (notifyEmails.length > 0 && ranges.length > 0) {
+          const portal = request.cookies.get(ADMIN_PORTAL_COOKIE)?.value === 'jess' ? 'jess' : 'tim'
+          const approver =
+            portal === 'jess'
+              ? { name: 'Jessica Coccaro', email: 'jessica.coccaro@ogilvy.com' }
+              : { name: 'Tim Legallo', email: 'tim.legallo@ogilvy.com' }
+
+          await sendApprovedTimeOffCalendarInvite({
+            requestId: requestId,
+            employeeName: requestData.user.name,
+            employeeEmail: requestData.user.email,
+            ranges,
+            notifyEmails,
+            approvedByName: approver.name,
+            approvedByEmail: approver.email,
+          })
+        }
+      } catch (inviteError) {
+        console.error('Failed to send calendar invites:', inviteError)
+        // Don't fail the approval if invite send fails
+      }
+    }
+
     return NextResponse.json({ request: updatedRequest })
   } catch (error) {
     console.error('Approve/reject request error:', error)
@@ -103,4 +141,78 @@ export async function POST(request: NextRequest) {
       { status: 500 }
     )
   }
+}
+
+function parseNotifyEmails(raw: unknown): NotifyEmailEntry[] {
+  if (!raw || !Array.isArray(raw)) return []
+  const out: NotifyEmailEntry[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue
+    const email = typeof (entry as any).email === 'string' ? (entry as any).email.trim() : ''
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue
+    const name = typeof (entry as any).name === 'string' ? (entry as any).name : undefined
+    out.push({ email, name })
+  }
+  return out
+}
+
+function parseLocalDateKey(key: string): Date | null {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key)
+  if (!m) return null
+  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0)
+}
+
+function buildIcsRanges(
+  dayBreakdown: unknown,
+  startDate: Date,
+  endDate: Date,
+  requestType: string
+): IcsRange[] {
+  // If we have a per-day breakdown, group consecutive same-type days into ranges.
+  // Skips WFH days unless explicitly recorded — time off is the priority.
+  const breakdown =
+    dayBreakdown && typeof dayBreakdown === 'object' && !Array.isArray(dayBreakdown)
+      ? (dayBreakdown as Record<string, string>)
+      : null
+
+  if (breakdown && Object.keys(breakdown).length > 0) {
+    const entries = Object.entries(breakdown)
+      .map(([key, type]) => {
+        const date = parseLocalDateKey(key)
+        if (!date) return null
+        const t = type === 'TIME_OFF' || type === 'WFH' ? type : null
+        if (!t) return null
+        return { date, type: t as 'TIME_OFF' | 'WFH' }
+      })
+      .filter((e): e is { date: Date; type: 'TIME_OFF' | 'WFH' } => e !== null)
+      .sort((a, b) => a.date.getTime() - b.date.getTime())
+
+    const ranges: IcsRange[] = []
+    let current: IcsRange | null = null
+    for (const { date, type } of entries) {
+      if (
+        current &&
+        current.type === type &&
+        (date.getTime() - current.endDate.getTime()) / (1000 * 60 * 60 * 24) === 1
+      ) {
+        current.endDate = date
+      } else {
+        if (current) ranges.push(current)
+        current = { startDate: date, endDate: date, type }
+      }
+    }
+    if (current) ranges.push(current)
+    return ranges
+  }
+
+  // Fallback: single range covering the whole request
+  const type: 'TIME_OFF' | 'WFH' =
+    requestType === 'WFH' ? 'WFH' : 'TIME_OFF'
+  return [
+    {
+      startDate: new Date(startDate),
+      endDate: new Date(endDate),
+      type,
+    },
+  ]
 }

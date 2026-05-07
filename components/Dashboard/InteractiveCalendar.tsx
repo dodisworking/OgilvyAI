@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useEffect } from 'react'
 import { format, startOfMonth, endOfMonth, eachDayOfInterval, isSameDay, addMonths, subMonths, isToday } from 'date-fns'
 
 interface DayData {
@@ -8,19 +8,33 @@ interface DayData {
   type: 'TIME_OFF' | 'WFH' | null
 }
 
+interface NotifyUser {
+  id: string
+  name: string
+  email: string
+  profilePicture?: string | null
+}
+
+export interface NotifyEntry {
+  email: string
+  name?: string
+}
+
 interface InteractiveCalendarProps {
   initialBrush?: 'TIME_OFF' | 'WFH'
   userName?: string
+  userEmail?: string
   initialSelectedDays?: Map<string, 'TIME_OFF' | 'WFH'> // Pre-populate with existing dates
   initialTitle?: string
   initialReason?: string
-  onDatesSelected: (dates: { startDate: Date; endDate: Date; requestType: 'TIME_OFF' | 'WFH' | 'BOTH'; title?: string; reason?: string; dayBreakdown?: Record<string, 'TIME_OFF' | 'WFH'> }[]) => void
+  initialNotifyEmails?: NotifyEntry[]
+  onDatesSelected: (dates: { startDate: Date; endDate: Date; requestType: 'TIME_OFF' | 'WFH' | 'BOTH'; title?: string; reason?: string; dayBreakdown?: Record<string, 'TIME_OFF' | 'WFH'>; notifyEmails?: NotifyEntry[] }[]) => void
   onCancel: () => void
 }
 
 type BrushMode = 'TIME_OFF' | 'WFH' | null
 
-export default function InteractiveCalendar({ initialBrush, userName = '', initialSelectedDays, initialTitle, initialReason, onDatesSelected, onCancel }: InteractiveCalendarProps) {
+export default function InteractiveCalendar({ initialBrush, userName = '', userEmail = '', initialSelectedDays, initialTitle, initialReason, initialNotifyEmails, onDatesSelected, onCancel }: InteractiveCalendarProps) {
   // Set initial month to first selected date if editing, otherwise current month
   const getInitialMonth = () => {
     if (initialSelectedDays && initialSelectedDays.size > 0) {
@@ -37,6 +51,79 @@ export default function InteractiveCalendar({ initialBrush, userName = '', initi
   const [showReview, setShowReview] = useState(false)
   const [title, setTitle] = useState(initialTitle || '')
   const [reason, setReason] = useState(initialReason || '')
+
+  // Who-to-notify state
+  const [allUsers, setAllUsers] = useState<NotifyUser[]>([])
+  const [isLoadingUsers, setIsLoadingUsers] = useState(false)
+  const [userSearch, setUserSearch] = useState('')
+  const [notifyEntries, setNotifyEntries] = useState<NotifyEntry[]>(initialNotifyEmails || [])
+  const [customEmailInput, setCustomEmailInput] = useState('')
+  const [customEmailError, setCustomEmailError] = useState('')
+
+  useEffect(() => {
+    if (!showReview) return
+    if (allUsers.length > 0) return
+    let cancelled = false
+    setIsLoadingUsers(true)
+    fetch('/api/drowning/users', { credentials: 'include' })
+      .then((res) => (res.ok ? res.json() : Promise.reject()))
+      .then((data) => {
+        if (cancelled) return
+        const users: NotifyUser[] = data.users || []
+        // Hide the requester from the list
+        const filtered = userEmail
+          ? users.filter((u) => u.email.toLowerCase() !== userEmail.toLowerCase())
+          : users
+        setAllUsers(filtered)
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (!cancelled) setIsLoadingUsers(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [showReview, allUsers.length, userEmail])
+
+  const isEmailNotified = (email: string) =>
+    notifyEntries.some((n) => n.email.toLowerCase() === email.toLowerCase())
+
+  const toggleUserNotify = (user: NotifyUser) => {
+    if (isEmailNotified(user.email)) {
+      setNotifyEntries((prev) => prev.filter((n) => n.email.toLowerCase() !== user.email.toLowerCase()))
+    } else {
+      setNotifyEntries((prev) => [...prev, { name: user.name, email: user.email }])
+    }
+  }
+
+  const removeNotify = (email: string) => {
+    setNotifyEntries((prev) => prev.filter((n) => n.email.toLowerCase() !== email.toLowerCase()))
+  }
+
+  const addCustomEmail = () => {
+    const trimmed = customEmailInput.trim()
+    if (!trimmed) return
+    const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmed)
+    if (!valid) {
+      setCustomEmailError('Please enter a valid email address')
+      return
+    }
+    if (isEmailNotified(trimmed)) {
+      setCustomEmailError('Already added')
+      return
+    }
+    setNotifyEntries((prev) => [...prev, { email: trimmed }])
+    setCustomEmailInput('')
+    setCustomEmailError('')
+  }
+
+  const filteredUsers = useMemo(() => {
+    const q = userSearch.trim().toLowerCase()
+    if (!q) return allUsers
+    return allUsers.filter(
+      (u) => u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+    )
+  }, [allUsers, userSearch])
 
   const monthStart = startOfMonth(currentMonth)
   const monthEnd = endOfMonth(currentMonth)
@@ -212,7 +299,7 @@ export default function InteractiveCalendar({ initialBrush, userName = '', initi
     const requestType: 'TIME_OFF' | 'WFH' | 'BOTH' =
       hasTimeOff && hasWFH ? 'BOTH' : hasTimeOff ? 'TIME_OFF' : 'WFH'
 
-    const finalDates: { startDate: Date; endDate: Date; requestType: 'TIME_OFF' | 'WFH' | 'BOTH'; title?: string; reason?: string; dayBreakdown?: Record<string, 'TIME_OFF' | 'WFH'> }[] = [
+    const finalDates: { startDate: Date; endDate: Date; requestType: 'TIME_OFF' | 'WFH' | 'BOTH'; title?: string; reason?: string; dayBreakdown?: Record<string, 'TIME_OFF' | 'WFH'>; notifyEmails?: NotifyEntry[] }[] = [
       {
         startDate: earliestStart,
         endDate: latestEnd,
@@ -220,6 +307,7 @@ export default function InteractiveCalendar({ initialBrush, userName = '', initi
         title: title || undefined,
         reason: reason || undefined,
         dayBreakdown,
+        notifyEmails: notifyEntries.length > 0 ? notifyEntries : undefined,
       },
     ]
 
@@ -233,6 +321,9 @@ export default function InteractiveCalendar({ initialBrush, userName = '', initi
     setTitle('')
     setReason('')
     setSelectedDays(new Map())
+    setNotifyEntries([])
+    setCustomEmailInput('')
+    setCustomEmailError('')
   }
 
   const titleSuggestions = [
@@ -379,6 +470,143 @@ export default function InteractiveCalendar({ initialBrush, userName = '', initi
               rows={3}
               className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent resize-none"
             />
+          </div>
+
+          {/* Who to Notify */}
+          <div className="mb-6 p-5 rounded-xl border-2 border-purple-200 dark:border-purple-700 bg-gradient-to-br from-purple-50/60 to-pink-50/60 dark:from-purple-900/10 dark:to-pink-900/10">
+            <div className="flex items-start gap-3 mb-3">
+              <div className="w-10 h-10 rounded-full bg-gradient-to-r from-purple-500 to-pink-500 flex items-center justify-center text-white text-lg flex-shrink-0">
+                📩
+              </div>
+              <div>
+                <p className="font-bold text-gray-800 dark:text-gray-100">
+                  Who do you want to let know?
+                </p>
+                <p className="text-xs text-gray-600 dark:text-gray-400">
+                  Once Tim approves, we&apos;ll send each person a calendar invite for these days.
+                  It will appear as <strong>Free</strong> on their Outlook calendar.
+                </p>
+              </div>
+            </div>
+
+            {/* Selected chips */}
+            {notifyEntries.length > 0 && (
+              <div className="flex flex-wrap gap-2 mb-3 p-2 bg-white/60 dark:bg-gray-900/30 rounded-lg">
+                {notifyEntries.map((entry) => (
+                  <span
+                    key={entry.email}
+                    className="inline-flex items-center gap-1.5 pl-2 pr-1 py-1 rounded-full bg-purple-600 text-white text-xs font-medium"
+                  >
+                    {entry.name || entry.email}
+                    <button
+                      type="button"
+                      onClick={() => removeNotify(entry.email)}
+                      aria-label={`Remove ${entry.email}`}
+                      className="w-5 h-5 rounded-full bg-white/20 hover:bg-white/30 flex items-center justify-center"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Search + user list */}
+            <input
+              type="text"
+              value={userSearch}
+              onChange={(e) => setUserSearch(e.target.value)}
+              placeholder="Search team by name or email…"
+              className="w-full px-3 py-2 mb-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+            />
+            <div className="max-h-44 overflow-y-auto rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+              {isLoadingUsers ? (
+                <div className="flex justify-center py-4">
+                  <div className="animate-spin rounded-full h-5 w-5 border-b-2 border-purple-500" />
+                </div>
+              ) : filteredUsers.length === 0 ? (
+                <p className="text-center text-gray-500 dark:text-gray-400 text-sm py-4">
+                  {userSearch ? 'No matches' : 'No teammates available'}
+                </p>
+              ) : (
+                <ul className="divide-y divide-gray-100 dark:divide-gray-700">
+                  {filteredUsers.map((u) => {
+                    const checked = isEmailNotified(u.email)
+                    return (
+                      <li key={u.id}>
+                        <label
+                          className={`flex items-center gap-3 px-3 py-2 cursor-pointer transition-colors ${
+                            checked
+                              ? 'bg-purple-50 dark:bg-purple-900/30'
+                              : 'hover:bg-gray-50 dark:hover:bg-gray-700'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={checked}
+                            onChange={() => toggleUserNotify(u)}
+                            className="h-4 w-4 text-purple-600 focus:ring-purple-500 rounded"
+                          />
+                          {u.profilePicture ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={u.profilePicture}
+                              alt={u.name}
+                              className="w-7 h-7 rounded-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-7 h-7 rounded-full bg-gradient-to-r from-purple-400 to-pink-400 flex items-center justify-center text-white text-xs font-bold">
+                              {u.name[0]?.toUpperCase()}
+                            </div>
+                          )}
+                          <div className="min-w-0 flex-1">
+                            <p className="text-sm font-medium text-gray-800 dark:text-gray-100 truncate">
+                              {u.name}
+                            </p>
+                            <p className="text-xs text-gray-500 truncate">{u.email}</p>
+                          </div>
+                        </label>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )}
+            </div>
+
+            {/* Custom email entry */}
+            <div className="mt-3">
+              <p className="text-xs font-medium text-gray-700 dark:text-gray-300 mb-1.5">
+                Or add an email manually:
+              </p>
+              <div className="flex gap-2">
+                <input
+                  type="email"
+                  value={customEmailInput}
+                  onChange={(e) => {
+                    setCustomEmailInput(e.target.value)
+                    if (customEmailError) setCustomEmailError('')
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      e.preventDefault()
+                      addCustomEmail()
+                    }
+                  }}
+                  placeholder="someone@company.com"
+                  className="flex-1 px-3 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-sm text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+                />
+                <button
+                  type="button"
+                  onClick={addCustomEmail}
+                  className="px-4 py-2 rounded-lg bg-purple-600 text-white text-sm font-medium hover:bg-purple-700"
+                >
+                  Add
+                </button>
+              </div>
+              {customEmailError && (
+                <p className="text-xs text-red-600 mt-1">{customEmailError}</p>
+              )}
+            </div>
           </div>
 
           <div className="flex gap-4">

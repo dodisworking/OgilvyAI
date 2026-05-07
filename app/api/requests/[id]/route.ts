@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
+import { Prisma } from '@prisma/client'
 import { getSessionFromCookie } from '@/lib/session'
 import { sendRequestSubmissionNotifications } from '@/lib/email'
 
@@ -73,7 +74,7 @@ export async function PUT(
     }
 
     const { id: requestId } = await params
-    const { startDate, endDate, requestType, title, reason } = await request.json()
+    const { startDate, endDate, requestType, title, reason, notifyEmails, dayBreakdown } = await request.json()
 
     // Validation
     if (!startDate || !endDate || !requestType) {
@@ -130,6 +131,11 @@ export async function PUT(
     const parsedStartDate = parseDate(startDate)
     const parsedEndDate = parseDate(endDate)
 
+    const sanitizedNotifyEmails = sanitizeNotifyEmails(notifyEmails)
+    const formattedDayBreakdown = dayBreakdown && typeof dayBreakdown === 'object' && Object.keys(dayBreakdown).length > 0
+      ? dayBreakdown
+      : undefined
+
     const updatedRequest = await db.request.update({
       where: { id: requestId },
       data: {
@@ -138,6 +144,14 @@ export async function PUT(
         requestType,
         title: title || null,
         reason: reason || null,
+        ...(formattedDayBreakdown !== undefined ? { dayBreakdown: formattedDayBreakdown } : {}),
+        ...(notifyEmails !== undefined
+          ? {
+              notifyEmails: sanitizedNotifyEmails.length
+                ? (sanitizedNotifyEmails as unknown as Prisma.InputJsonValue)
+                : Prisma.JsonNull,
+            }
+          : {}),
         status: 'PENDING', // Reset to PENDING when edited
         adminNotes: null, // Clear admin notes when resubmitted
       },
@@ -181,4 +195,21 @@ export async function PUT(
       { status: 500 }
     )
   }
+}
+
+function sanitizeNotifyEmails(raw: unknown): { name?: string; email: string }[] {
+  if (!Array.isArray(raw)) return []
+  const seen = new Set<string>()
+  const out: { name?: string; email: string }[] = []
+  for (const entry of raw) {
+    if (!entry || typeof entry !== 'object') continue
+    const email = typeof (entry as any).email === 'string' ? (entry as any).email.trim() : ''
+    if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) continue
+    const key = email.toLowerCase()
+    if (seen.has(key)) continue
+    seen.add(key)
+    const name = typeof (entry as any).name === 'string' ? (entry as any).name : undefined
+    out.push({ email, name })
+  }
+  return out
 }

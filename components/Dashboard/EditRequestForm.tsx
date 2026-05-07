@@ -38,6 +38,7 @@ export default function EditRequestForm({ request, onClose, onSuccess }: EditReq
     title?: string
     reason?: string
     dayBreakdown?: Record<string, 'TIME_OFF' | 'WFH'>
+    notifyEmails?: { email: string; name?: string }[]
   }[]) => {
     if (dateRanges.length === 0) {
       setError('Please select at least one day')
@@ -61,7 +62,8 @@ export default function EditRequestForm({ request, onClose, onSuccess }: EditReq
       const title = sortedRanges[0].title
       const reason = sortedRanges[0].reason
       const dayBreakdown = sortedRanges[0].dayBreakdown
-      
+      const notifyEmails = sortedRanges[0].notifyEmails
+
       const response = await fetch(`/api/requests/${request.id}`, {
         method: 'PUT',
         headers: {
@@ -75,6 +77,7 @@ export default function EditRequestForm({ request, onClose, onSuccess }: EditReq
           title: title || null,
           reason: reason || null,
           dayBreakdown: dayBreakdown || null,
+          notifyEmails: notifyEmails && notifyEmails.length > 0 ? notifyEmails : null,
         }),
       })
 
@@ -111,10 +114,12 @@ export default function EditRequestForm({ request, onClose, onSuccess }: EditReq
 
         <InteractiveCalendar
           initialBrush={request.requestType as 'TIME_OFF' | 'WFH'}
-          userName=""
+          userName={request.user?.name || ''}
+          userEmail={request.user?.email || ''}
           initialSelectedDays={initialSelectedDays}
           initialTitle={request.title || ''}
           initialReason={request.reason || ''}
+          initialNotifyEmails={request.notifyEmails || []}
           onDatesSelected={handleDatesSelected}
           onCancel={onClose}
         />

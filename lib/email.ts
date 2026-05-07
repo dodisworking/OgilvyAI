@@ -514,6 +514,226 @@ export async function sendRequestDecisionNotificationToTim(data: RequestDecision
   }
 }
 
+// ----- Calendar invite (.ics) helpers -----
+
+const pad = (n: number) => n.toString().padStart(2, '0')
+
+const formatIcsDate = (date: Date) => {
+  // Local-date format YYYYMMDD (used with VALUE=DATE for all-day events)
+  return `${date.getFullYear()}${pad(date.getMonth() + 1)}${pad(date.getDate())}`
+}
+
+const formatIcsUtcStamp = (date: Date) => {
+  return (
+    date.getUTCFullYear().toString() +
+    pad(date.getUTCMonth() + 1) +
+    pad(date.getUTCDate()) +
+    'T' +
+    pad(date.getUTCHours()) +
+    pad(date.getUTCMinutes()) +
+    pad(date.getUTCSeconds()) +
+    'Z'
+  )
+}
+
+const escapeIcsText = (text: string) => {
+  return text
+    .replace(/\\/g, '\\\\')
+    .replace(/\n/g, '\\n')
+    .replace(/,/g, '\\,')
+    .replace(/;/g, '\\;')
+}
+
+export interface IcsRange {
+  startDate: Date // inclusive
+  endDate: Date // inclusive
+  type: 'TIME_OFF' | 'WFH'
+}
+
+interface BuildIcsOptions {
+  organizerName: string
+  organizerEmail: string
+  attendees: Array<{ name?: string; email: string }>
+  ranges: IcsRange[]
+  subjectPersonName: string
+  uidSeed: string
+}
+
+export function buildIcsCalendarInvite({
+  organizerName,
+  organizerEmail,
+  attendees,
+  ranges,
+  subjectPersonName,
+  uidSeed,
+}: BuildIcsOptions) {
+  const dtstamp = formatIcsUtcStamp(new Date())
+
+  const lines: string[] = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//Tim The Man//Time Off Calendar//EN',
+    'CALSCALE:GREGORIAN',
+    'METHOD:REQUEST',
+  ]
+
+  ranges.forEach((range, idx) => {
+    const summary =
+      range.type === 'TIME_OFF'
+        ? `${subjectPersonName} Time Off`
+        : `${subjectPersonName} Work Remote`
+
+    // DTEND for VALUE=DATE is exclusive — add one day to the inclusive end date.
+    const inclusiveEnd = new Date(range.endDate)
+    inclusiveEnd.setHours(0, 0, 0, 0)
+    const exclusiveEnd = new Date(inclusiveEnd)
+    exclusiveEnd.setDate(exclusiveEnd.getDate() + 1)
+
+    const start = new Date(range.startDate)
+    start.setHours(0, 0, 0, 0)
+
+    const uid = `timtheman-${uidSeed}-${idx}-${formatIcsDate(start)}@timtheman`
+
+    lines.push('BEGIN:VEVENT')
+    lines.push(`UID:${uid}`)
+    lines.push(`DTSTAMP:${dtstamp}`)
+    lines.push(`DTSTART;VALUE=DATE:${formatIcsDate(start)}`)
+    lines.push(`DTEND;VALUE=DATE:${formatIcsDate(exclusiveEnd)}`)
+    lines.push(`SUMMARY:${escapeIcsText(summary)}`)
+    lines.push('TRANSP:TRANSPARENT') // appears as Free
+    lines.push('X-MICROSOFT-CDO-BUSYSTATUS:FREE')
+    lines.push('X-MICROSOFT-CDO-ALLDAYEVENT:TRUE')
+    lines.push('STATUS:CONFIRMED')
+    lines.push('CLASS:PUBLIC')
+    lines.push('SEQUENCE:0')
+    lines.push(
+      `ORGANIZER;CN=${escapeIcsText(organizerName)}:mailto:${organizerEmail}`
+    )
+    attendees.forEach((a) => {
+      const cn = a.name ? `;CN=${escapeIcsText(a.name)}` : ''
+      lines.push(
+        `ATTENDEE;ROLE=REQ-PARTICIPANT;PARTSTAT=NEEDS-ACTION;RSVP=TRUE${cn}:mailto:${a.email}`
+      )
+    })
+    lines.push('END:VEVENT')
+  })
+
+  lines.push('END:VCALENDAR')
+
+  // RFC5545 wants CRLF line endings
+  return lines.join('\r\n')
+}
+
+export interface NotifyEmailEntry {
+  name?: string
+  email: string
+}
+
+export interface SendApprovedTimeOffInviteData {
+  requestId: string
+  employeeName: string
+  employeeEmail: string
+  ranges: IcsRange[]
+  notifyEmails: NotifyEmailEntry[]
+  approvedByName?: string
+  approvedByEmail?: string
+}
+
+export async function sendApprovedTimeOffCalendarInvite(
+  data: SendApprovedTimeOffInviteData
+) {
+  if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
+    console.error('Gmail credentials not configured - cannot send calendar invite')
+    return
+  }
+  if (!data.ranges.length) return
+  if (!data.notifyEmails.length) return
+
+  const organizerEmail = GMAIL_USER
+  const organizerName = data.employeeName
+
+  // Dedupe attendees (case-insensitive on email)
+  const seen = new Set<string>()
+  const attendees = data.notifyEmails
+    .map((a) => ({ name: a.name, email: a.email.trim() }))
+    .filter((a) => {
+      if (!a.email) return false
+      const key = a.email.toLowerCase()
+      if (seen.has(key)) return false
+      seen.add(key)
+      return true
+    })
+
+  if (!attendees.length) return
+
+  const ics = buildIcsCalendarInvite({
+    organizerName,
+    organizerEmail,
+    attendees,
+    ranges: data.ranges,
+    subjectPersonName: data.employeeName,
+    uidSeed: data.requestId,
+  })
+
+  const rangeSummary = data.ranges
+    .map((r) => {
+      const sameDay = r.startDate.toDateString() === r.endDate.toDateString()
+      const label = r.type === 'TIME_OFF' ? 'Time Off' : 'Work Remote'
+      return sameDay
+        ? `${label}: ${r.startDate.toLocaleDateString()}`
+        : `${label}: ${r.startDate.toLocaleDateString()} – ${r.endDate.toLocaleDateString()}`
+    })
+    .join('<br/>')
+
+  const html = `
+    <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+      <h2 style="color: #333; margin-bottom: 14px;">Heads up — ${data.employeeName} is out</h2>
+      <p>Hi,</p>
+      <p>
+        <strong>${data.employeeName}</strong> has had time off approved by ${data.approvedByName || 'Tim'}.
+        A calendar invite is attached so you have it on your calendar (it will appear as <strong>Free</strong>, not Busy).
+      </p>
+      <div style="background:#f9f9f9; padding:14px; border-radius:8px; margin:16px 0;">
+        ${rangeSummary}
+      </div>
+      <p style="color:#666; font-size:13px;">You don't need to do anything — this is just so you know.</p>
+    </div>
+  `
+
+  // One invite-style email per attendee so each one gets a real RSVP-able invite.
+  const subject = `${data.employeeName} – Time Off / Work Remote`
+
+  const sendPromises = attendees.map(async (a) => {
+    try {
+      await transporter.sendMail({
+        from: `"${organizerName}" <${GMAIL_USER}>`,
+        to: a.email,
+        subject,
+        html,
+        icalEvent: {
+          method: 'REQUEST',
+          content: ics,
+          filename: 'invite.ics',
+        },
+        alternatives: [
+          {
+            contentType: 'text/calendar; charset=UTF-8; method=REQUEST',
+            content: ics,
+          },
+        ],
+      } as any)
+      return { email: a.email, success: true }
+    } catch (error: any) {
+      console.error(`Failed to send calendar invite to ${a.email}:`, error)
+      return { email: a.email, success: false, error: error.message }
+    }
+  })
+
+  const results = await Promise.all(sendPromises)
+  console.log('Calendar invites sent', { requestId: data.requestId, results })
+  return results
+}
+
 export interface DrowningNotificationData {
   drowningUserName: string
   drowningUserEmail: string

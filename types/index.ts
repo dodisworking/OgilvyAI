@@ -12,6 +12,7 @@ export interface Request {
   status: RequestStatus
   adminNotes?: string
   dayBreakdown?: Record<string, 'TIME_OFF' | 'WFH'> // Maps date strings (YYYY-MM-DD) to their request type
+  notifyEmails?: { email: string; name?: string }[]
   createdAt: Date
   updatedAt: Date
   user?: {

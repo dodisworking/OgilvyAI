@@ -130,6 +130,7 @@ export default function Dashboard() {
     title?: string
     reason?: string
     dayBreakdown?: Record<string, 'TIME_OFF' | 'WFH'>
+    notifyEmails?: { email: string; name?: string }[]
   }[]) => {
     setIsSubmitting(true)
     try {
@@ -149,6 +150,7 @@ export default function Dashboard() {
               title: range.title || null,
               reason: range.reason || null,
               dayBreakdown: range.dayBreakdown && Object.keys(range.dayBreakdown).length > 0 ? range.dayBreakdown : null,
+              notifyEmails: range.notifyEmails && range.notifyEmails.length > 0 ? range.notifyEmails : null,
             }),
           })
           return { ok: response.ok, status: response.status, response }
@@ -531,6 +533,7 @@ export default function Dashboard() {
             <h2 className="text-xl font-bold mb-4">Submit Time</h2>
             <InteractiveCalendar
               userName={user?.name || ''}
+              userEmail={user?.email || ''}
               onDatesSelected={handleDatesSelected}
               onCancel={() => setShowCalendar(false)}
             />
