@@ -124,13 +124,11 @@ export default function LoginForm() {
         const data = await res.json().catch(() => ({}))
         throw new Error(data.error || 'Could not reset password')
       }
-      setForgotMessage('Password updated. You can sign in with the new one.')
-      setEmail(forgotEmail.trim())
-      setPassword('')
-      setTimeout(closeForgot, 1200)
+      setForgotMessage('Password updated. Signing you in…')
+      // Reset endpoint also set the session cookie — go straight to the dashboard.
+      window.location.href = '/dashboard'
     } catch (err: any) {
       setForgotError(err.message || 'Something went wrong')
-    } finally {
       setForgotLoading(false)
     }
   }
@@ -374,9 +372,10 @@ export default function LoginForm() {
         {needsProfilePicture ? 'Complete Profile' : 'Sign In'}
       </Button>
 
+      {/* Render the modal — defined below */}
       {showForgot && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4" role="dialog">
-          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6 relative">
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4 overflow-y-auto" role="dialog">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl shadow-2xl max-w-md w-full p-6 relative my-8 max-h-[90vh] overflow-y-auto">
             <button
               type="button"
               onClick={closeForgot}
@@ -388,171 +387,210 @@ export default function LoginForm() {
             <h3 className="text-lg font-bold mb-1 bg-gradient-to-r from-purple-600 to-pink-600 bg-clip-text text-transparent">
               Reset your password
             </h3>
-
-            {/* Step indicator */}
-            <div className="flex items-center gap-1.5 mb-4 mt-1">
-              {(['email', 'code', 'password'] as const).map((s, i) => {
-                const active = forgotStep === s
-                const past =
-                  (forgotStep === 'code' && s === 'email') ||
-                  (forgotStep === 'password' && (s === 'email' || s === 'code'))
-                return (
-                  <div key={s} className="flex items-center gap-1.5 flex-1">
-                    <div
-                      className={`w-5 h-5 rounded-full flex items-center justify-center text-[10px] font-bold ${
-                        active
-                          ? 'bg-purple-600 text-white'
-                          : past
-                            ? 'bg-green-500 text-white'
-                            : 'bg-gray-200 text-gray-500 dark:bg-gray-700'
-                      }`}
-                    >
-                      {past ? '✓' : i + 1}
-                    </div>
-                    <div
-                      className={`flex-1 h-0.5 ${
-                        i === 2
-                          ? 'invisible'
-                          : past
-                            ? 'bg-green-500'
-                            : active
-                              ? 'bg-gradient-to-r from-purple-500 to-gray-200 dark:to-gray-700'
-                              : 'bg-gray-200 dark:bg-gray-700'
-                      }`}
-                    />
-                  </div>
-                )
-              })}
-            </div>
             <p className="text-xs text-gray-500 mb-4">
-              {forgotStep === 'email'
-                ? "Enter your work email and we'll send a 6-digit code."
-                : forgotStep === 'code'
-                  ? `We sent a code to ${forgotMaskedEmail || forgotEmail}. Enter the 6 digits below.`
-                  : 'Code verified. Pick a new password.'}
+              Three quick steps. Each one unlocks the next.
             </p>
 
-            {forgotStep === 'email' && (
-              <form onSubmit={handleSendCode} className="space-y-3">
-                <input
-                  type="email"
-                  value={forgotEmail}
-                  onChange={(e) => setForgotEmail(e.target.value)}
-                  placeholder="you@company.com"
-                  className="w-full px-4 py-2 rounded-lg border-2 border-purple-200 focus:border-purple-500 focus:outline-none"
-                  autoFocus
-                  required
-                />
-                {forgotError && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
-                    {forgotError}
-                  </div>
-                )}
-                {forgotMessage && (
-                  <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-lg text-sm">
-                    {forgotMessage}
-                  </div>
-                )}
-                <Button type="submit" isLoading={forgotLoading} className="w-full">
-                  Send code
-                </Button>
-              </form>
-            )}
+            <div className="space-y-4">
+              {/* STEP 1 — Email */}
+              <ForgotStep
+                index={1}
+                title="Enter your email"
+                state={forgotStep === 'email' ? 'active' : 'done'}
+                hint={
+                  forgotStep === 'email'
+                    ? "We'll send a 6-digit code from Tim's Production Wizard."
+                    : `Code sent to ${forgotMaskedEmail || forgotEmail}.`
+                }
+              >
+                <form onSubmit={handleSendCode} className="space-y-2">
+                  <input
+                    type="email"
+                    value={forgotEmail}
+                    onChange={(e) => setForgotEmail(e.target.value)}
+                    placeholder="you@company.com"
+                    className="w-full px-4 py-2 rounded-lg border-2 border-purple-200 focus:border-purple-500 focus:outline-none disabled:opacity-60"
+                    autoFocus={forgotStep === 'email'}
+                    required
+                    disabled={forgotStep !== 'email'}
+                  />
+                  {forgotStep === 'email' && (
+                    <Button type="submit" isLoading={forgotLoading} className="w-full">
+                      Send code
+                    </Button>
+                  )}
+                  {forgotStep !== 'email' && (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={resendCode}
+                        disabled={forgotLoading}
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700 text-xs disabled:opacity-50"
+                      >
+                        Resend code
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setForgotStep('email')
+                          setForgotCode('')
+                          setForgotNewPassword('')
+                          setForgotConfirmPassword('')
+                          setForgotError('')
+                          setForgotMessage('')
+                        }}
+                        className="flex-1 px-3 py-1.5 rounded-lg border border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700 text-xs"
+                      >
+                        Different email
+                      </button>
+                    </div>
+                  )}
+                </form>
+              </ForgotStep>
 
-            {forgotStep === 'code' && (
-              <form onSubmit={handleVerifyCode} className="space-y-3">
-                <input
-                  type="text"
-                  inputMode="numeric"
-                  pattern="\d*"
-                  value={forgotCode}
-                  onChange={(e) => {
-                    const digits = e.target.value.replace(/\D/g, '').slice(0, 6)
-                    setForgotCode(digits)
-                  }}
-                  placeholder="••••••"
-                  maxLength={6}
-                  className="w-full px-4 py-3 rounded-lg border-2 border-purple-200 focus:border-purple-500 focus:outline-none tracking-[0.6em] text-center font-mono text-2xl"
-                  autoFocus
-                  required
-                />
-                {forgotError && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
-                    {forgotError}
-                  </div>
-                )}
-                {forgotMessage && (
-                  <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-lg text-sm">
-                    {forgotMessage}
-                  </div>
-                )}
-                <div className="flex gap-2">
-                  <button
-                    type="button"
-                    onClick={resendCode}
-                    disabled={forgotLoading}
-                    className="flex-1 px-3 py-2 rounded-lg border border-gray-300 hover:bg-gray-100 dark:border-gray-600 dark:hover:bg-gray-700 text-sm disabled:opacity-50"
-                  >
-                    Resend code
-                  </button>
-                  <Button type="submit" isLoading={forgotLoading} className="flex-1">
-                    Verify code
-                  </Button>
+              {/* STEP 2 — Code */}
+              <ForgotStep
+                index={2}
+                title="Enter the code from your email"
+                state={
+                  forgotStep === 'email'
+                    ? 'locked'
+                    : forgotStep === 'code'
+                      ? 'active'
+                      : 'done'
+                }
+                hint={
+                  forgotStep === 'email'
+                    ? 'Send the code first.'
+                    : forgotStep === 'code'
+                      ? 'Check your inbox (and spam) for a 6-digit code.'
+                      : 'Code verified.'
+                }
+              >
+                <form onSubmit={handleVerifyCode} className="space-y-2">
+                  <input
+                    type="text"
+                    inputMode="numeric"
+                    pattern="\d*"
+                    value={forgotCode}
+                    onChange={(e) => {
+                      const digits = e.target.value.replace(/\D/g, '').slice(0, 6)
+                      setForgotCode(digits)
+                    }}
+                    placeholder="••••••"
+                    maxLength={6}
+                    className="w-full px-4 py-3 rounded-lg border-2 border-purple-200 focus:border-purple-500 focus:outline-none tracking-[0.6em] text-center font-mono text-2xl disabled:opacity-60"
+                    required
+                    disabled={forgotStep !== 'code'}
+                    autoFocus={forgotStep === 'code'}
+                  />
+                  {forgotStep === 'code' && (
+                    <Button type="submit" isLoading={forgotLoading} className="w-full">
+                      Verify code
+                    </Button>
+                  )}
+                </form>
+              </ForgotStep>
+
+              {/* STEP 3 — New password */}
+              <ForgotStep
+                index={3}
+                title="Pick a new password"
+                state={forgotStep === 'password' ? 'active' : 'locked'}
+                hint={
+                  forgotStep === 'password'
+                    ? "We'll log you in straight after."
+                    : 'Verify the code first.'
+                }
+              >
+                <form onSubmit={handleResetSubmit} className="space-y-2">
+                  <input
+                    type="password"
+                    value={forgotNewPassword}
+                    onChange={(e) => setForgotNewPassword(e.target.value)}
+                    placeholder="New password"
+                    className="w-full px-4 py-2 rounded-lg border-2 border-purple-200 focus:border-purple-500 focus:outline-none disabled:opacity-60"
+                    required
+                    minLength={6}
+                    disabled={forgotStep !== 'password'}
+                    autoFocus={forgotStep === 'password'}
+                  />
+                  <input
+                    type="password"
+                    value={forgotConfirmPassword}
+                    onChange={(e) => setForgotConfirmPassword(e.target.value)}
+                    placeholder="Confirm new password"
+                    className="w-full px-4 py-2 rounded-lg border-2 border-purple-200 focus:border-purple-500 focus:outline-none disabled:opacity-60"
+                    required
+                    minLength={6}
+                    disabled={forgotStep !== 'password'}
+                  />
+                  {forgotStep === 'password' && (
+                    <Button type="submit" isLoading={forgotLoading} className="w-full">
+                      Reset password & sign in
+                    </Button>
+                  )}
+                </form>
+              </ForgotStep>
+
+              {forgotError && (
+                <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
+                  {forgotError}
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setForgotStep('email')
-                    setForgotCode('')
-                    setForgotError('')
-                    setForgotMessage('')
-                  }}
-                  className="text-xs text-gray-500 hover:text-gray-700 dark:hover:text-gray-300 w-full text-center"
-                >
-                  ← Use a different email
-                </button>
-              </form>
-            )}
-
-            {forgotStep === 'password' && (
-              <form onSubmit={handleResetSubmit} className="space-y-3">
-                <input
-                  type="password"
-                  value={forgotNewPassword}
-                  onChange={(e) => setForgotNewPassword(e.target.value)}
-                  placeholder="New password"
-                  className="w-full px-4 py-2 rounded-lg border-2 border-purple-200 focus:border-purple-500 focus:outline-none"
-                  autoFocus
-                  required
-                  minLength={6}
-                />
-                <input
-                  type="password"
-                  value={forgotConfirmPassword}
-                  onChange={(e) => setForgotConfirmPassword(e.target.value)}
-                  placeholder="Confirm new password"
-                  className="w-full px-4 py-2 rounded-lg border-2 border-purple-200 focus:border-purple-500 focus:outline-none"
-                  required
-                  minLength={6}
-                />
-                {forgotError && (
-                  <div className="bg-red-50 border border-red-200 text-red-700 px-3 py-2 rounded-lg text-sm">
-                    {forgotError}
-                  </div>
-                )}
-                {forgotMessage && (
-                  <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-lg text-sm">
-                    {forgotMessage}
-                  </div>
-                )}
-                <Button type="submit" isLoading={forgotLoading} className="w-full">
-                  Reset password
-                </Button>
-              </form>
-            )}
+              )}
+              {forgotMessage && (
+                <div className="bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded-lg text-sm">
+                  {forgotMessage}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}
     </form>
+  )
+}
+
+interface ForgotStepProps {
+  index: number
+  title: string
+  state: 'locked' | 'active' | 'done'
+  hint?: string
+  children: React.ReactNode
+}
+
+function ForgotStep({ index, title, state, hint, children }: ForgotStepProps) {
+  const badgeBg =
+    state === 'done'
+      ? 'bg-green-500 text-white'
+      : state === 'active'
+        ? 'bg-purple-600 text-white'
+        : 'bg-gray-200 text-gray-500 dark:bg-gray-700 dark:text-gray-400'
+  const cardClasses =
+    state === 'locked'
+      ? 'border-gray-200 dark:border-gray-700 bg-gray-50/60 dark:bg-gray-900/30'
+      : state === 'done'
+        ? 'border-green-200 dark:border-green-700 bg-green-50/60 dark:bg-green-900/10'
+        : 'border-purple-300 dark:border-purple-600 bg-white dark:bg-gray-800 shadow-sm'
+
+  return (
+    <div className={`rounded-xl border-2 p-3 transition-colors ${cardClasses}`}>
+      <div className="flex items-start gap-2 mb-2">
+        <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 ${badgeBg}`}>
+          {state === 'done' ? '✓' : index}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className={`text-sm font-semibold ${
+            state === 'locked' ? 'text-gray-500 dark:text-gray-400' : 'text-gray-800 dark:text-gray-100'
+          }`}>
+            {title}
+          </p>
+          {hint && (
+            <p className="text-[11px] text-gray-500 dark:text-gray-400">{hint}</p>
+          )}
+        </div>
+      </div>
+      <div>{children}</div>
+    </div>
   )
 }

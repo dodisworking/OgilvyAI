@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { setUserPasswordWithHistory } from '@/lib/passwordHistory'
+import { createSession, COOKIE_NAME } from '@/lib/session'
 
 export async function POST(request: NextRequest) {
   try {
@@ -61,7 +62,25 @@ export async function POST(request: NextRequest) {
       data: { usedAt: new Date() },
     })
 
-    return NextResponse.json({ ok: true })
+    // Sign the user in immediately — they just proved control of the email.
+    const token = await createSession(user.id, user.email, false)
+    const response = NextResponse.json({
+      ok: true,
+      user: {
+        id: user.id,
+        email: user.email,
+        name: user.name,
+      },
+    })
+    response.cookies.set(COOKIE_NAME, token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7,
+      path: '/',
+    })
+
+    return response
   } catch (error) {
     console.error('Reset password error:', error)
     return NextResponse.json({ error: 'Failed to reset password' }, { status: 500 })
