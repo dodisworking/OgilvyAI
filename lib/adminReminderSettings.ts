@@ -9,7 +9,7 @@ export interface AdminReminderSettings {
 
 const DEFAULT_SETTINGS: AdminReminderSettings = {
   remindersEnabled: true,
-  reminderEveryDays: 2,
+  reminderEveryDays: 3,
   reminderHour: 10,
   timezone: 'America/New_York',
 }

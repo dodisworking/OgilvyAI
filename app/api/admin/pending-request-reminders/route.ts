@@ -96,6 +96,11 @@ export async function POST(request: NextRequest) {
           startDate: pending.startDate,
           endDate: pending.endDate,
           createdAt: pending.createdAt,
+          title: pending.title,
+          dayBreakdown:
+            pending.dayBreakdown && typeof pending.dayBreakdown === 'object'
+              ? (pending.dayBreakdown as Record<string, string>)
+              : null,
         })),
         baseUrl
       )

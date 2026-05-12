@@ -260,6 +260,10 @@ export interface PendingRequestReportRow {
   startDate: Date
   endDate: Date
   createdAt: Date
+  title?: string | null
+  reason?: string | null
+  /** Per-day map: yyyy-mm-dd -> 'TIME_OFF' | 'WFH'. Lets us show the split. */
+  dayBreakdown?: Record<string, string> | null
 }
 
 export async function sendRequestDecisionToEmployee(data: RequestDecisionData) {
@@ -406,67 +410,134 @@ export async function sendPendingRequestReportToTim(rows: PendingRequestReportRo
   const appBaseUrl = baseUrl || process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
   const reviewUrl = `${appBaseUrl}/admin`
 
-  const formatType = (requestType: string) =>
-    requestType === 'WFH'
-      ? 'Work From Home'
-      : requestType === 'TIME_OFF'
-        ? 'Time Off'
-        : 'WFH & Time Off'
+  const dateOnly = (d: Date | string) => new Date(d).toLocaleDateString()
+  const inclusiveDayCount = (start: Date, end: Date) => {
+    const a = new Date(start); a.setHours(0, 0, 0, 0)
+    const b = new Date(end); b.setHours(0, 0, 0, 0)
+    const diff = Math.floor((b.getTime() - a.getTime()) / (1000 * 60 * 60 * 24))
+    return Math.max(1, diff + 1)
+  }
 
-  const rowsHtml = rows
+  // Pull TIME_OFF/WFH counts from the per-day breakdown if we have one;
+  // otherwise fall back to whole-range counts based on the request type.
+  const splitFor = (row: PendingRequestReportRow) => {
+    const breakdown = row.dayBreakdown && typeof row.dayBreakdown === 'object'
+      ? row.dayBreakdown
+      : null
+
+    if (breakdown && Object.keys(breakdown).length > 0) {
+      let timeOff = 0
+      let wfh = 0
+      for (const v of Object.values(breakdown)) {
+        if (v === 'TIME_OFF') timeOff++
+        else if (v === 'WFH') wfh++
+      }
+      return { timeOff, wfh }
+    }
+
+    const total = inclusiveDayCount(row.startDate, row.endDate)
+    if (row.requestType === 'WFH') return { timeOff: 0, wfh: total }
+    if (row.requestType === 'TIME_OFF') return { timeOff: total, wfh: 0 }
+    // BOTH but no breakdown — best effort: call them all time off so the prompt
+    // pushes Tim toward the headline category.
+    return { timeOff: total, wfh: 0 }
+  }
+
+  const cardsHtml = rows
     .map((row) => {
-      const dateRange = row.startDate.toLocaleDateString() === row.endDate.toLocaleDateString()
-        ? row.startDate.toLocaleDateString()
-        : `${row.startDate.toLocaleDateString()} - ${row.endDate.toLocaleDateString()}`
+      const { timeOff, wfh } = splitFor(row)
+      const sameDay = dateOnly(row.startDate) === dateOnly(row.endDate)
+      const dateRange = sameDay ? dateOnly(row.startDate) : `${dateOnly(row.startDate)} – ${dateOnly(row.endDate)}`
+      const submittedAgo = (() => {
+        const days = Math.floor((Date.now() - new Date(row.createdAt).getTime()) / (1000 * 60 * 60 * 24))
+        if (days <= 0) return 'today'
+        if (days === 1) return '1 day ago'
+        return `${days} days ago`
+      })()
+
+      // Time off is the headline; WFH is a small subline so Tim's eye lands on
+      // the day(s) that actually need coverage planning.
+      const timeOffLabel = timeOff > 0
+        ? `<span style="display:inline-block; padding: 4px 10px; background: linear-gradient(135deg,#ef4444,#ec4899); color:white; border-radius:999px; font-weight:700; font-size:13px;">${timeOff} day${timeOff === 1 ? '' : 's'} time off</span>`
+        : `<span style="display:inline-block; padding: 4px 10px; background:#f3f4f6; color:#6b7280; border-radius:999px; font-weight:600; font-size:13px;">No time off — WFH only</span>`
+
+      const wfhSub = wfh > 0
+        ? `<div style="font-size:11px; color:#6b7280; margin-top:6px;">+ ${wfh} day${wfh === 1 ? '' : 's'} working from home</div>`
+        : ''
+
+      const titleLine = row.title
+        ? `<p style="margin:6px 0 0 0; font-size:13px; color:#374151;"><em>${escapeHtml(row.title)}</em></p>`
+        : ''
+
       return `
-        <tr>
-          <td style="padding: 8px; border: 1px solid #e5e7eb;">${row.employeeName}</td>
-          <td style="padding: 8px; border: 1px solid #e5e7eb;">${row.employeeEmail}</td>
-          <td style="padding: 8px; border: 1px solid #e5e7eb;">${formatType(row.requestType)}</td>
-          <td style="padding: 8px; border: 1px solid #e5e7eb;">${dateRange}</td>
-          <td style="padding: 8px; border: 1px solid #e5e7eb;">${new Date(row.createdAt).toLocaleDateString()}</td>
-        </tr>
+        <div style="border:1px solid #e5e7eb; border-radius:14px; padding:16px; margin:14px 0; background:white; box-shadow: 0 1px 2px rgba(0,0,0,0.04);">
+          <div style="display:flex; align-items:flex-start; justify-content:space-between; gap:12px;">
+            <div style="min-width:0;">
+              <p style="margin:0; font-weight:700; color:#111827; font-size:15px;">${escapeHtml(row.employeeName)}</p>
+              <p style="margin:2px 0 0 0; font-size:12px; color:#6b7280;">${escapeHtml(row.employeeEmail)}</p>
+            </div>
+            <div style="text-align:right; flex-shrink:0;">${timeOffLabel}${wfhSub}</div>
+          </div>
+          <div style="margin-top:10px; padding:10px 12px; background:#fafafa; border-radius:10px;">
+            <p style="margin:0; font-size:13px; color:#111827;"><strong>📅 ${dateRange}</strong></p>
+            ${titleLine}
+            <p style="margin:6px 0 0 0; font-size:11px; color:#9ca3af;">Submitted ${submittedAgo}</p>
+          </div>
+        </div>
       `
     })
     .join('')
 
   const html = `
-    <div style="font-family: Arial, sans-serif; max-width: 760px; margin: 0 auto; padding: 20px;">
-      <h2 style="color: #333; margin-bottom: 10px;">Pending Requests Report</h2>
-      <p style="margin-bottom: 16px;">
-        Hey Tim, here is a simple summary of team members still waiting for approval.
-      </p>
-      <table style="width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 14px;">
-        <thead>
-          <tr style="background: #f3f4f6;">
-            <th style="text-align: left; padding: 8px; border: 1px solid #e5e7eb;">Name</th>
-            <th style="text-align: left; padding: 8px; border: 1px solid #e5e7eb;">Email</th>
-            <th style="text-align: left; padding: 8px; border: 1px solid #e5e7eb;">Type</th>
-            <th style="text-align: left; padding: 8px; border: 1px solid #e5e7eb;">Dates</th>
-            <th style="text-align: left; padding: 8px; border: 1px solid #e5e7eb;">Submitted</th>
-          </tr>
-        </thead>
-        <tbody>
-          ${rowsHtml}
-        </tbody>
-      </table>
-      <div style="text-align: center; margin: 24px 0;">
-        <a href="${reviewUrl}"
-           style="display: inline-block; padding: 12px 20px; background: linear-gradient(135deg, #9333ea 0%, #ec4899 100%);
-                  color: white; text-decoration: none; border-radius: 8px; font-weight: bold;">
-          Review Pending Requests
-        </a>
+    <div style="font-family: -apple-system, Segoe UI, Arial, sans-serif; max-width: 640px; margin: 0 auto; padding: 24px; background:#f9fafb;">
+      <div style="background: linear-gradient(135deg, #4f46e5 0%, #9333ea 50%, #ec4899 100%); padding: 18px 20px; border-radius: 14px 14px 0 0; color: white;">
+        <p style="margin:0; font-size:13px; opacity:0.9;">🥷 Aisaac assistant</p>
+        <h2 style="margin:4px 0 0 0; font-size:22px;">Hey Tim — heads up</h2>
+      </div>
+
+      <div style="background: white; padding: 20px; border-radius: 0 0 14px 14px; border:1px solid #e5e7eb; border-top:none;">
+        <p style="margin:0 0 10px 0; color:#374151;">
+          Hi Tim, how are you doing? This is your handy-dandy <strong>Aisaac agent</strong>, just here to remind you that
+          <strong>${rows.length} ${rows.length === 1 ? 'person has' : 'people have'}</strong> submitted time-off requests
+          that are still waiting on your approval (or rejection).
+        </p>
+
+        ${cardsHtml}
+
+        <div style="text-align: center; margin: 24px 0 8px;">
+          <a href="${reviewUrl}"
+             style="display: inline-block; padding: 14px 26px; background: linear-gradient(135deg, #4f46e5 0%, #9333ea 50%, #ec4899 100%);
+                    color: white; text-decoration: none; border-radius: 10px; font-weight: 700; font-size:15px; box-shadow: 0 4px 10px rgba(147,51,234,0.25);">
+            Click here to approve or reject →
+          </a>
+        </div>
+
+        <p style="margin:18px 0 0; font-size:11px; color:#9ca3af; text-align:center;">
+          You'll get this nudge every few days while requests sit unactioned. It's been at least 3 days for at least one of these.
+        </p>
       </div>
     </div>
   `
 
+  const subject = rows.length === 1
+    ? `🥷 Aisaac: ${rows[0].employeeName} is still waiting on your approval`
+    : `🥷 Aisaac: ${rows.length} time-off requests waiting on you`
+
   await transporter.sendMail({
-    from: GMAIL_USER,
+    from: `"Aisaac assistant" <${GMAIL_USER}>`,
     to: TIM_EMAIL,
-    subject: `Pending Requests Report (${rows.length})`,
+    subject,
     html,
   })
 }
+
+const escapeHtml = (s: string) =>
+  String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;')
 
 export async function sendRequestDecisionNotificationToTim(data: RequestDecisionData) {
   if (!GMAIL_USER || !GMAIL_APP_PASSWORD) {
