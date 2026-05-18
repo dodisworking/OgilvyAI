@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { getSessionFromCookie } from '@/lib/session'
 import { sendRequestSubmissionNotifications } from '@/lib/email'
+import { resolveSubmitterUser } from '@/lib/portalUser'
 
 // GET all requests (for admin or user's own requests)
 export async function GET(request: NextRequest) {
@@ -49,7 +50,7 @@ export async function POST(request: NextRequest) {
     const cookieHeader = request.headers.get('cookie')
     const session = await getSessionFromCookie(cookieHeader)
 
-    if (!session || session.isAdmin) {
+    if (!session) {
       return NextResponse.json(
         { error: 'Unauthorized' },
         { status: 401 }
@@ -73,15 +74,16 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    // Get user info
-    const user = await db.user.findUnique({
-      where: { id: session.userId },
-    })
+    // Resolve which User the request should be filed under. Regular users
+    // file as themselves. Admin sessions submit as the portal owner (Tim or
+    // Jess each have a real User row, auto-created on portal login), so they
+    // get the same approval flow + calendar invites as anyone else.
+    const user = await resolveSubmitterUser(request, session)
 
     if (!user) {
       return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
+        { error: 'Could not resolve which user to file the request under.' },
+        { status: 400 }
       )
     }
 
@@ -106,7 +108,7 @@ export async function POST(request: NextRequest) {
 
     const newRequest = await db.request.create({
       data: {
-        userId: session.userId,
+        userId: user.id,
         startDate: parsedStartDate,
         endDate: parsedEndDate,
         requestType,

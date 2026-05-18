@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { createSession, COOKIE_NAME } from '@/lib/session'
+import { hashPassword } from '@/lib/auth'
 
 const ADMIN_PORTAL_COOKIE = 'admin_portal_user'
 
@@ -86,10 +87,31 @@ export async function POST(request: NextRequest) {
       name: 'Tim',
     }
 
+    // Make sure a regular User row exists for the portal so the admin can also
+    // submit their own time-off requests (Jess + Tim each get a real user
+    // record with their work email — created the first time they log in).
+    const profile = PORTAL_PROFILE[selectedPortal]
+    try {
+      const existingUser = await db.user.findUnique({ where: { email: profile.email } })
+      if (!existingUser) {
+        const placeholderHash = await hashPassword(`portal-${selectedPortal}-${Date.now()}`)
+        await db.user.create({
+          data: {
+            email: profile.email,
+            name: profile.name,
+            passwordHash: placeholderHash,
+            accountType: 'PRODUCER',
+          },
+        })
+      }
+    } catch (err) {
+      console.error('Failed to ensure portal user row exists:', err)
+      // Non-fatal: login still works; submitting time off would just fail
+      // later, which surfaces a clear error rather than blocking login.
+    }
+
     // Create session in database
     const token = await createSession(adminSessionIdentity.id, adminSessionIdentity.email, true)
-
-    const profile = PORTAL_PROFILE[selectedPortal]
 
     // Create response with portal admin display data
     const response = NextResponse.json({
