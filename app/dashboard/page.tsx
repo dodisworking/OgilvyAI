@@ -133,6 +133,14 @@ export default function Dashboard() {
     notifyEmails?: { email: string; name?: string }[]
   }[]) => {
     setIsSubmitting(true)
+    // If the user submitted multiple distinct batches in one go, tag every
+    // request with the same batchId so the admin view can group them and
+    // approve/reject each individually.
+    const sharedBatchId =
+      dateRanges.length > 1
+        ? `b_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`
+        : null
+
     try {
       // Submit each date range as a separate request
       const promises = dateRanges.map(async (range) => {
@@ -151,6 +159,8 @@ export default function Dashboard() {
               reason: range.reason || null,
               dayBreakdown: range.dayBreakdown && Object.keys(range.dayBreakdown).length > 0 ? range.dayBreakdown : null,
               notifyEmails: range.notifyEmails && range.notifyEmails.length > 0 ? range.notifyEmails : null,
+              batchId: sharedBatchId,
+              batchLabel: range.title || null,
             }),
           })
           return { ok: response.ok, status: response.status, response }

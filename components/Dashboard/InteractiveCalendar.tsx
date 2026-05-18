@@ -51,6 +51,9 @@ export default function InteractiveCalendar({ initialBrush, userName = '', userE
   const [showReview, setShowReview] = useState(false)
   const [title, setTitle] = useState(initialTitle || '')
   const [reason, setReason] = useState(initialReason || '')
+  // Per-cluster labels when the user's selection has been split into multiple
+  // separate time-off batches (Map keyed by cluster start date YYYY-MM-DD).
+  const [clusterLabels, setClusterLabels] = useState<Map<string, string>>(new Map())
 
   // Who-to-notify state
   const [allUsers, setAllUsers] = useState<NotifyUser[]>([])
@@ -59,22 +62,33 @@ export default function InteractiveCalendar({ initialBrush, userName = '', userE
   const [notifyEntries, setNotifyEntries] = useState<NotifyEntry[]>(initialNotifyEmails || [])
   const [customEmailInput, setCustomEmailInput] = useState('')
   const [customEmailError, setCustomEmailError] = useState('')
+  const [recentRecipients, setRecentRecipients] = useState<NotifyEntry[]>([])
 
   useEffect(() => {
     if (!showReview) return
     if (allUsers.length > 0) return
     let cancelled = false
     setIsLoadingUsers(true)
-    fetch('/api/drowning/users', { credentials: 'include' })
-      .then((res) => (res.ok ? res.json() : Promise.reject()))
-      .then((data) => {
+
+    // Fetch teammates + recently-used recipients in parallel.
+    Promise.all([
+      fetch('/api/drowning/users', { credentials: 'include' }).then((r) => (r.ok ? r.json() : { users: [] })),
+      fetch('/api/notify-recipients/recent', { credentials: 'include' }).then((r) => (r.ok ? r.json() : { recipients: [] })),
+    ])
+      .then(([usersData, recentData]) => {
         if (cancelled) return
-        const users: NotifyUser[] = data.users || []
-        // Hide the requester from the list
-        const filtered = userEmail
+        const users: NotifyUser[] = usersData.users || []
+        const filteredUsers = userEmail
           ? users.filter((u) => u.email.toLowerCase() !== userEmail.toLowerCase())
           : users
-        setAllUsers(filtered)
+        setAllUsers(filteredUsers)
+
+        const recents: NotifyEntry[] = Array.isArray(recentData.recipients) ? recentData.recipients : []
+        // Drop recents that are the requester themselves.
+        const requesterEmail = (userEmail || '').toLowerCase()
+        setRecentRecipients(
+          recents.filter((r) => r.email.toLowerCase() !== requesterEmail).slice(0, 12)
+        )
       })
       .catch(() => {})
       .finally(() => {
@@ -253,6 +267,77 @@ export default function InteractiveCalendar({ initialBrush, userName = '', userE
     return ranges
   }, [selectedDays])
 
+  // Weekend-aware "batch" detection. Two selected days are in the SAME batch
+  // if there are no unselected weekdays (Mon–Fri) strictly between them.
+  // Friday + Monday → same batch (Sat/Sun don't count). Monday + Wednesday
+  // → different batches (Tue is a workday between them).
+  const clusters = useMemo(() => {
+    const sortedKeys = Array.from(selectedDays.keys()).sort()
+    if (sortedKeys.length === 0) return []
+
+    const isWorkday = (d: Date) => {
+      const day = d.getDay()
+      return day !== 0 && day !== 6 // 0=Sun, 6=Sat
+    }
+    const workdaysBetween = (a: Date, b: Date) => {
+      // Strictly between — exclusive of both endpoints.
+      let count = 0
+      const cur = new Date(a)
+      cur.setDate(cur.getDate() + 1)
+      while (cur.getTime() < b.getTime()) {
+        if (isWorkday(cur)) count++
+        cur.setDate(cur.getDate() + 1)
+      }
+      return count
+    }
+
+    type Cluster = {
+      key: string
+      dateKeys: string[]
+      startDate: Date
+      endDate: Date
+      timeOffCount: number
+      wfhCount: number
+    }
+    const out: Cluster[] = []
+    let current: Cluster | null = null
+
+    for (const k of sortedKeys) {
+      const date = parseDateLocal(k)
+      const type = selectedDays.get(k)
+      if (!current) {
+        current = {
+          key: k,
+          dateKeys: [k],
+          startDate: date,
+          endDate: date,
+          timeOffCount: type === 'TIME_OFF' ? 1 : 0,
+          wfhCount: type === 'WFH' ? 1 : 0,
+        }
+        continue
+      }
+      const gap = workdaysBetween(current.endDate, date)
+      if (gap === 0) {
+        current.endDate = date
+        current.dateKeys.push(k)
+        if (type === 'TIME_OFF') current.timeOffCount++
+        else if (type === 'WFH') current.wfhCount++
+      } else {
+        out.push(current)
+        current = {
+          key: k,
+          dateKeys: [k],
+          startDate: date,
+          endDate: date,
+          timeOffCount: type === 'TIME_OFF' ? 1 : 0,
+          wfhCount: type === 'WFH' ? 1 : 0,
+        }
+      }
+    }
+    if (current) out.push(current)
+    return out
+  }, [selectedDays])
+
   const handleSubmit = () => {
     if (groupedDates.length === 0) {
       alert('Please select at least one day')
@@ -299,24 +384,55 @@ export default function InteractiveCalendar({ initialBrush, userName = '', userE
     const requestType: 'TIME_OFF' | 'WFH' | 'BOTH' =
       hasTimeOff && hasWFH ? 'BOTH' : hasTimeOff ? 'TIME_OFF' : 'WFH'
 
-    const finalDates: { startDate: Date; endDate: Date; requestType: 'TIME_OFF' | 'WFH' | 'BOTH'; title?: string; reason?: string; dayBreakdown?: Record<string, 'TIME_OFF' | 'WFH'>; notifyEmails?: NotifyEntry[] }[] = [
-      {
-        startDate: earliestStart,
-        endDate: latestEnd,
-        requestType,
-        title: title || undefined,
-        reason: reason || undefined,
-        dayBreakdown,
-        notifyEmails: notifyEntries.length > 0 ? notifyEntries : undefined,
-      },
-    ]
+    // If the selection forms multiple separate batches (weekend-aware), submit
+    // one request per batch so Tim can approve/reject each individually.
+    // Otherwise fall back to a single combined request like before.
+    let finalDates: { startDate: Date; endDate: Date; requestType: 'TIME_OFF' | 'WFH' | 'BOTH'; title?: string; reason?: string; dayBreakdown?: Record<string, 'TIME_OFF' | 'WFH'>; notifyEmails?: NotifyEntry[] }[]
+
+    if (clusters.length > 1) {
+      finalDates = clusters.map((cluster) => {
+        const clusterBreakdown: Record<string, 'TIME_OFF' | 'WFH'> = {}
+        for (const k of cluster.dateKeys) {
+          const t = selectedDays.get(k)
+          if (t) clusterBreakdown[k] = t
+        }
+        const clusterType: 'TIME_OFF' | 'WFH' | 'BOTH' =
+          cluster.timeOffCount > 0 && cluster.wfhCount > 0
+            ? 'BOTH'
+            : cluster.wfhCount > 0
+              ? 'WFH'
+              : 'TIME_OFF'
+        const customLabel = clusterLabels.get(cluster.key)?.trim()
+        return {
+          startDate: cluster.startDate,
+          endDate: cluster.endDate,
+          requestType: clusterType,
+          title: customLabel || title || undefined,
+          reason: reason || undefined,
+          dayBreakdown: clusterBreakdown,
+          notifyEmails: notifyEntries.length > 0 ? notifyEntries : undefined,
+        }
+      })
+    } else {
+      finalDates = [
+        {
+          startDate: earliestStart,
+          endDate: latestEnd,
+          requestType,
+          title: title || undefined,
+          reason: reason || undefined,
+          dayBreakdown,
+          notifyEmails: notifyEntries.length > 0 ? notifyEntries : undefined,
+        },
+      ]
+    }
 
     // Close review modal first
     setShowReview(false)
-    
+
     // Call the callback with the dates
     onDatesSelected(finalDates)
-    
+
     // Reset form
     setTitle('')
     setReason('')
@@ -324,6 +440,7 @@ export default function InteractiveCalendar({ initialBrush, userName = '', userE
     setNotifyEntries([])
     setCustomEmailInput('')
     setCustomEmailError('')
+    setClusterLabels(new Map())
   }
 
   const titleSuggestions = [
@@ -432,31 +549,89 @@ export default function InteractiveCalendar({ initialBrush, userName = '', userE
             </div>
           </div>
 
-          {/* Title Field */}
-          <div className="mb-4">
-            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
-              Title <span className="text-gray-500 text-xs">(optional)</span>
-            </label>
-            <input
-              type="text"
-              value={title}
-              onChange={(e) => setTitle(e.target.value)}
-              placeholder="e.g., Vacation Time, Family Time"
-              className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
-            />
-            {/* Title Suggestions */}
-            <div className="mt-2 flex flex-wrap gap-2">
-              {titleSuggestions.map((suggestion, idx) => (
-                <button
-                  key={idx}
-                  onClick={() => setTitle(suggestion)}
-                  className="text-xs px-3 py-1 rounded-full border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
-                >
-                  {suggestion}
-                </button>
-              ))}
+          {clusters.length > 1 ? (
+            /* Multi-batch mode: one label per detected batch */
+            <div className="mb-4 p-4 rounded-xl border-2 border-orange-200 dark:border-orange-700 bg-orange-50/40 dark:bg-orange-900/10">
+              <div className="flex items-start gap-2 mb-3">
+                <div className="w-7 h-7 rounded-full bg-gradient-to-r from-orange-500 to-amber-500 flex items-center justify-center text-white text-sm flex-shrink-0">
+                  📦
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-800 dark:text-gray-100">
+                    We grouped your selection into {clusters.length} separate batches
+                  </p>
+                  <p className="text-[11px] text-gray-600 dark:text-gray-400">
+                    Each batch gets its own request so Tim can approve or reject them one by one.
+                    Weekends in between don&apos;t count as a break.
+                  </p>
+                </div>
+              </div>
+              <div className="space-y-2">
+                {clusters.map((cluster, idx) => {
+                  const sameDay = cluster.startDate.toDateString() === cluster.endDate.toDateString()
+                  const rangeLabel = sameDay
+                    ? formatDateLocal(cluster.startDate, true)
+                    : `${formatDateLocal(cluster.startDate, false)} – ${formatDateLocal(cluster.endDate, true)}`
+                  return (
+                    <div
+                      key={cluster.key}
+                      className="p-2.5 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                    >
+                      <div className="flex items-center gap-2 mb-1.5">
+                        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-orange-500 text-white text-[10px] font-bold">
+                          {idx + 1}
+                        </span>
+                        <p className="text-xs font-semibold text-gray-700 dark:text-gray-200">
+                          {rangeLabel}
+                        </p>
+                        <span className="text-[10px] text-gray-500 ml-auto">
+                          {cluster.timeOffCount > 0 && `${cluster.timeOffCount} time off`}
+                          {cluster.timeOffCount > 0 && cluster.wfhCount > 0 && ' · '}
+                          {cluster.wfhCount > 0 && `${cluster.wfhCount} WFH`}
+                        </span>
+                      </div>
+                      <input
+                        type="text"
+                        value={clusterLabels.get(cluster.key) || ''}
+                        onChange={(e) => {
+                          const next = new Map(clusterLabels)
+                          next.set(cluster.key, e.target.value)
+                          setClusterLabels(next)
+                        }}
+                        placeholder={`Label for batch ${idx + 1} (e.g., ${idx === 0 ? 'Long weekend' : idx === 1 ? 'Family visit' : 'Vacation'})`}
+                        className="w-full px-3 py-1.5 rounded-md border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-xs"
+                      />
+                    </div>
+                  )
+                })}
+              </div>
             </div>
-          </div>
+          ) : (
+            /* Single-batch mode: original Title field */
+            <div className="mb-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                Title <span className="text-gray-500 text-xs">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={title}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="e.g., Vacation Time, Family Time"
+                className="w-full px-4 py-2 rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-purple-500 focus:border-transparent"
+              />
+              <div className="mt-2 flex flex-wrap gap-2">
+                {titleSuggestions.map((suggestion, idx) => (
+                  <button
+                    key={idx}
+                    onClick={() => setTitle(suggestion)}
+                    className="text-xs px-3 py-1 rounded-full border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 transition-colors"
+                  >
+                    {suggestion}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Reason Field */}
           <div className="mb-6">
@@ -508,6 +683,42 @@ export default function InteractiveCalendar({ initialBrush, userName = '', userE
                     </button>
                   </span>
                 ))}
+              </div>
+            )}
+
+            {/* Recently invited — one-tap add for the people you usually loop in */}
+            {recentRecipients.filter((r) => !isEmailNotified(r.email)).length > 0 && (
+              <div className="mb-3 p-2.5 rounded-lg bg-purple-50/50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800">
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-300">
+                    🕘 Recently invited
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const toAdd = recentRecipients.filter((r) => !isEmailNotified(r.email))
+                      setNotifyEntries((prev) => [...prev, ...toAdd])
+                    }}
+                    className="text-[11px] font-medium text-purple-700 hover:text-purple-900 dark:text-purple-300"
+                  >
+                    Add everyone
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {recentRecipients
+                    .filter((r) => !isEmailNotified(r.email))
+                    .map((r) => (
+                      <button
+                        key={r.email}
+                        type="button"
+                        onClick={() => setNotifyEntries((prev) => [...prev, r])}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700 text-xs text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
+                      >
+                        <span>+</span>
+                        <span>{r.name || r.email}</span>
+                      </button>
+                    ))}
+                </div>
               </div>
             )}
 

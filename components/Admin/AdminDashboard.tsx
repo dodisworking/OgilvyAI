@@ -156,7 +156,8 @@ export default function AdminDashboard({
         </div>
       </div>
 
-      {/* Requests List */}
+      {/* Requests List — single requests render flat, batched requests are
+          grouped into a "Batch from X — N requests" wrapper. */}
       <div className={`min-h-0 flex-1 space-y-4 overflow-y-auto pr-1 ${isMobile ? 'pb-2' : 'pr-2'}`}
       >
         {filteredRequests.length === 0 ? (
@@ -165,15 +166,61 @@ export default function AdminDashboard({
             <p className="text-sm mt-2">Try adjusting your filters</p>
           </div>
         ) : (
-          filteredRequests.map((request) => (
-            <RequestCard
-              key={request.id}
-              request={request}
-              onUpdate={onRefresh}
-              compactCalendarModal={isMobile}
-              forceIsaacCode={forceIsaacCode}
-            />
-          ))
+          (() => {
+            const seenBatches = new Set<string>()
+            const out: React.ReactNode[] = []
+            for (const request of filteredRequests) {
+              const bid = request.batchId
+              if (bid && !seenBatches.has(bid)) {
+                seenBatches.add(bid)
+                const siblings = filteredRequests.filter((r) => r.batchId === bid)
+                if (siblings.length > 1) {
+                  const submitter = siblings[0].user?.name || 'Someone'
+                  out.push(
+                    <div
+                      key={`batch-${bid}`}
+                      className="rounded-2xl border-2 border-orange-200 dark:border-orange-700 bg-orange-50/30 dark:bg-orange-900/10 p-3"
+                    >
+                      <div className="flex items-center gap-2 mb-2 px-1">
+                        <span className="text-base">📦</span>
+                        <p className="text-sm font-bold text-orange-800 dark:text-orange-200">
+                          Batch from {submitter}
+                        </p>
+                        <span className="text-xs text-orange-700/70 dark:text-orange-300/70">
+                          {siblings.length} requests — approve or reject each separately
+                        </span>
+                      </div>
+                      <div className="space-y-3">
+                        {siblings.map((sib) => (
+                          <RequestCard
+                            key={sib.id}
+                            request={sib}
+                            onUpdate={onRefresh}
+                            compactCalendarModal={isMobile}
+                            forceIsaacCode={forceIsaacCode}
+                          />
+                        ))}
+                      </div>
+                    </div>
+                  )
+                  continue
+                }
+              } else if (bid && seenBatches.has(bid)) {
+                // Already rendered as part of its batch group above.
+                continue
+              }
+              out.push(
+                <RequestCard
+                  key={request.id}
+                  request={request}
+                  onUpdate={onRefresh}
+                  compactCalendarModal={isMobile}
+                  forceIsaacCode={forceIsaacCode}
+                />
+              )
+            }
+            return out
+          })()
         )}
       </div>
 

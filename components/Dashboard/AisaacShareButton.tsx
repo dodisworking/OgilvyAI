@@ -26,6 +26,7 @@ export default function AisaacShareButton({ request, onShared }: AisaacShareButt
   const [isLoadingUsers, setIsLoadingUsers] = useState(false)
   const [search, setSearch] = useState('')
   const [picked, setPicked] = useState<NotifyEntry[]>([])
+  const [recentRecipients, setRecentRecipients] = useState<NotifyEntry[]>([])
   const [customInput, setCustomInput] = useState('')
   const [customError, setCustomError] = useState('')
   const [submitting, setSubmitting] = useState(false)
@@ -47,14 +48,22 @@ export default function AisaacShareButton({ request, onShared }: AisaacShareButt
     if (!open || allUsers.length > 0) return
     let cancelled = false
     setIsLoadingUsers(true)
-    fetch('/api/drowning/users', { credentials: 'include' })
-      .then((r) => (r.ok ? r.json() : Promise.reject()))
-      .then((data) => {
+    Promise.all([
+      fetch('/api/drowning/users', { credentials: 'include' }).then((r) => (r.ok ? r.json() : { users: [] })),
+      fetch('/api/notify-recipients/recent', { credentials: 'include' }).then((r) => (r.ok ? r.json() : { recipients: [] })),
+    ])
+      .then(([usersData, recentData]) => {
         if (cancelled) return
-        const users: NotifyUser[] = data.users || []
+        const users: NotifyUser[] = usersData.users || []
         const requesterEmail = request.user?.email?.toLowerCase()
         setAllUsers(
           requesterEmail ? users.filter((u) => u.email.toLowerCase() !== requesterEmail) : users
+        )
+        const recents: NotifyEntry[] = Array.isArray(recentData.recipients) ? recentData.recipients : []
+        setRecentRecipients(
+          requesterEmail
+            ? recents.filter((r) => r.email.toLowerCase() !== requesterEmail).slice(0, 12)
+            : recents.slice(0, 12)
         )
       })
       .catch(() => {})
@@ -239,6 +248,43 @@ export default function AisaacShareButton({ request, onShared }: AisaacShareButt
                       </button>
                     </span>
                   ))}
+                </div>
+              </div>
+            )}
+
+            {recentRecipients.filter((r) => !isPicked(r.email) && !alreadyInvitedSet.has(r.email.toLowerCase())).length > 0 && (
+              <div className="mb-3 p-2.5 rounded-lg bg-purple-50/50 dark:bg-purple-900/10 border border-purple-100 dark:border-purple-800">
+                <div className="flex items-center justify-between mb-1.5">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-purple-700 dark:text-purple-300">
+                    🕘 Recently invited
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const toAdd = recentRecipients.filter(
+                        (r) => !isPicked(r.email) && !alreadyInvitedSet.has(r.email.toLowerCase())
+                      )
+                      setPicked((prev) => [...prev, ...toAdd])
+                    }}
+                    className="text-[11px] font-medium text-purple-700 hover:text-purple-900 dark:text-purple-300"
+                  >
+                    Add everyone
+                  </button>
+                </div>
+                <div className="flex flex-wrap gap-1.5">
+                  {recentRecipients
+                    .filter((r) => !isPicked(r.email) && !alreadyInvitedSet.has(r.email.toLowerCase()))
+                    .map((r) => (
+                      <button
+                        key={r.email}
+                        type="button"
+                        onClick={() => setPicked((prev) => [...prev, r])}
+                        className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-white dark:bg-gray-800 border border-purple-200 dark:border-purple-700 text-xs text-purple-700 dark:text-purple-300 hover:bg-purple-100 dark:hover:bg-purple-900/30 transition-colors"
+                      >
+                        <span>+</span>
+                        <span>{r.name || r.email}</span>
+                      </button>
+                    ))}
                 </div>
               </div>
             )}

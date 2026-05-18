@@ -57,7 +57,7 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    const { startDate, endDate, requestType, title, reason, dayBreakdown, notifyEmails } = await request.json()
+    const { startDate, endDate, requestType, title, reason, dayBreakdown, notifyEmails, batchId, batchLabel } = await request.json()
 
     // Validation
     if (!startDate || !endDate || !requestType) {
@@ -116,6 +116,8 @@ export async function POST(request: NextRequest) {
         reason: reason || null,
         dayBreakdown: formattedDayBreakdown,
         notifyEmails: sanitizedNotifyEmails.length ? sanitizedNotifyEmails : undefined,
+        batchId: typeof batchId === 'string' && batchId.length > 0 ? batchId : null,
+        batchLabel: typeof batchLabel === 'string' && batchLabel.length > 0 ? batchLabel : null,
         status: 'PENDING',
       },
       include: {

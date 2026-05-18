@@ -71,7 +71,11 @@ model Request {
   dayBreakdown Json?
   notifyEmails Json?
   pendingCancelRanges Json?
+  batchId      String?
+  batchLabel   String?
   user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([batchId])
 
   @@map("requests")
 }

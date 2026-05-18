@@ -94,7 +94,7 @@ export async function sendRequestNotificationToAdmin(data: RequestNotificationDa
     const result = await transporter.sendMail({
       from: GMAIL_USER,
       to: ADMIN_EMAIL,
-      subject: `${data.employeeName} submitted ${requestTypeText} - ${dateRange}`,
+      subject: `Time off submission from ${data.employeeName}`,
       html,
     })
     console.log(`✅ Email notification successfully sent to ${ADMIN_EMAIL} for request from ${data.employeeName}`)
@@ -194,7 +194,7 @@ export async function sendRequestSubmissionNotifications(data: RequestSubmission
   const employeeEmailResult = await transporter.sendMail({
       from: GMAIL_USER,
       to: data.employeeEmail,
-      subject: `${threadTag} Request received: ${requestTypeText} (${dateRange})`,
+      subject: `Time off submission confirmation`,
       html: employeeHtml,
       headers: data.requestId
         ? {
@@ -208,7 +208,7 @@ export async function sendRequestSubmissionNotifications(data: RequestSubmission
       from: GMAIL_USER,
       to: 'tim.legallo@ogilvy.com',
       cc: 'isaac.boruchowicz@ogilvy.com',
-      subject: `${threadTag} ${data.employeeName} submitted ${requestTypeText} (${daysText})`,
+      subject: `Time off submission from ${data.employeeName}`,
       html: adminHtml,
       headers: data.requestId
         ? {
@@ -336,7 +336,7 @@ export async function sendRequestDecisionToEmployee(data: RequestDecisionData) {
       to: data.employeeEmail,
       cc: ccRecipients.length > 0 ? ccRecipients.join(',') : undefined,
       replyTo: approvedByEmail,
-      subject: `${threadTag} ${requestTypeText} ${statusText}`,
+      subject: data.status === 'APPROVED' ? 'Time off approved' : 'Time off rejected',
       html,
       headers: data.requestId
         ? {
@@ -394,7 +394,7 @@ export async function sendPendingApprovalReminderToTim(data: PendingApprovalRemi
   await transporter.sendMail({
     from: GMAIL_USER,
     to: TIM_EMAIL,
-    subject: `[Reminder] Pending request from ${data.employeeName} (${requestTypeText})`,
+    subject: `Tim's reminder: pending request from ${data.employeeName}`,
     html,
   })
 }
@@ -576,7 +576,9 @@ export async function sendRequestDecisionNotificationToTim(data: RequestDecision
     await transporter.sendMail({
       from: GMAIL_USER,
       to: TIM_EMAIL,
-      subject: `Request ${statusText}: ${data.employeeName} (${requestTypeText})`,
+      subject: data.status === 'APPROVED'
+        ? `Time off approved: ${data.employeeName}`
+        : `Time off rejected: ${data.employeeName}`,
       html,
     })
   } catch (error) {
@@ -816,7 +818,7 @@ export async function sendApprovedTimeOffCalendarInvite(
 
   // One invite-style email per attendee with a personal ICS — addresses only
   // them as the ATTENDEE, which is what Outlook expects for an inline invite.
-  const subject = `${data.employeeName} – Time Off / Work Remote`
+  const subject = `${data.employeeName} — Time off`
 
   const method = data.method ?? 'REQUEST'
   const sequence = data.sequence ?? 0

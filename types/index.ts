@@ -13,6 +13,8 @@ export interface Request {
   adminNotes?: string
   dayBreakdown?: Record<string, 'TIME_OFF' | 'WFH'> // Maps date strings (YYYY-MM-DD) to their request type
   notifyEmails?: { email: string; name?: string }[]
+  batchId?: string | null
+  batchLabel?: string | null
   createdAt: Date
   updatedAt: Date
   user?: {
