@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { db } from '@/lib/db'
 import { Prisma } from '@prisma/client'
+import { buildIcsRangesFromRequest } from '@/lib/icsRanges'
 import { getSessionFromCookie } from '@/lib/session'
 import { sendRequestSubmissionNotifications } from '@/lib/email'
 
@@ -224,53 +225,13 @@ function snapshotRequestRanges(
   endDate: Date,
   requestType: string
 ): Array<{ startDate: string; endDate: string; type: 'TIME_OFF' | 'WFH' }> {
-  const breakdown =
-    dayBreakdown && typeof dayBreakdown === 'object' && !Array.isArray(dayBreakdown)
-      ? (dayBreakdown as Record<string, string>)
-      : null
-
-  const parseLocalDateKey = (key: string) => {
-    const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key)
-    if (!m) return null
-    return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0)
-  }
-
-  if (breakdown && Object.keys(breakdown).length > 0) {
-    const entries = Object.entries(breakdown)
-      .map(([key, type]) => {
-        const date = parseLocalDateKey(key)
-        if (!date) return null
-        const t = type === 'TIME_OFF' || type === 'WFH' ? type : null
-        if (!t) return null
-        return { date, type: t as 'TIME_OFF' | 'WFH' }
-      })
-      .filter((e): e is { date: Date; type: 'TIME_OFF' | 'WFH' } => e !== null)
-      .sort((a, b) => a.date.getTime() - b.date.getTime())
-
-    const ranges: Array<{ startDate: string; endDate: string; type: 'TIME_OFF' | 'WFH' }> = []
-    let current: { startDate: Date; endDate: Date; type: 'TIME_OFF' | 'WFH' } | null = null
-    for (const { date, type } of entries) {
-      if (
-        current &&
-        current.type === type &&
-        (date.getTime() - current.endDate.getTime()) / (1000 * 60 * 60 * 24) === 1
-      ) {
-        current.endDate = date
-      } else {
-        if (current) {
-          ranges.push({ startDate: current.startDate.toISOString(), endDate: current.endDate.toISOString(), type: current.type })
-        }
-        current = { startDate: date, endDate: date, type }
-      }
-    }
-    if (current) {
-      ranges.push({ startDate: current.startDate.toISOString(), endDate: current.endDate.toISOString(), type: current.type })
-    }
-    return ranges
-  }
-
-  const type: 'TIME_OFF' | 'WFH' = requestType === 'WFH' ? 'WFH' : 'TIME_OFF'
-  return [{ startDate: new Date(startDate).toISOString(), endDate: new Date(endDate).toISOString(), type }]
+  // Use the same gap-filling logic as the live calendar invite so CANCEL
+  // events line up exactly with what was originally sent.
+  return buildIcsRangesFromRequest(dayBreakdown, startDate, endDate, requestType).map((r) => ({
+    startDate: r.startDate.toISOString(),
+    endDate: r.endDate.toISOString(),
+    type: r.type,
+  }))
 }
 
 function sanitizeNotifyEmails(raw: unknown): { name?: string; email: string }[] {

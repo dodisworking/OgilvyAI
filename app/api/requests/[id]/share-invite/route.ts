@@ -7,6 +7,7 @@ import {
   IcsRange,
   NotifyEmailEntry,
 } from '@/lib/email'
+import { buildIcsRangesFromRequest } from '@/lib/icsRanges'
 
 export async function POST(
   request: NextRequest,
@@ -145,59 +146,4 @@ function parseExistingNotifyEmails(raw: unknown): NotifyEmailEntry[] {
   return out
 }
 
-function parseLocalDateKey(key: string): Date | null {
-  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(key)
-  if (!m) return null
-  return new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3]), 12, 0, 0, 0)
-}
-
-function buildIcsRanges(
-  dayBreakdown: unknown,
-  startDate: Date,
-  endDate: Date,
-  requestType: string
-): IcsRange[] {
-  const breakdown =
-    dayBreakdown && typeof dayBreakdown === 'object' && !Array.isArray(dayBreakdown)
-      ? (dayBreakdown as Record<string, string>)
-      : null
-
-  if (breakdown && Object.keys(breakdown).length > 0) {
-    const entries = Object.entries(breakdown)
-      .map(([key, type]) => {
-        const date = parseLocalDateKey(key)
-        if (!date) return null
-        const t = type === 'TIME_OFF' || type === 'WFH' ? type : null
-        if (!t) return null
-        return { date, type: t as 'TIME_OFF' | 'WFH' }
-      })
-      .filter((e): e is { date: Date; type: 'TIME_OFF' | 'WFH' } => e !== null)
-      .sort((a, b) => a.date.getTime() - b.date.getTime())
-
-    const ranges: IcsRange[] = []
-    let current: IcsRange | null = null
-    for (const { date, type } of entries) {
-      if (
-        current &&
-        current.type === type &&
-        (date.getTime() - current.endDate.getTime()) / (1000 * 60 * 60 * 24) === 1
-      ) {
-        current.endDate = date
-      } else {
-        if (current) ranges.push(current)
-        current = { startDate: date, endDate: date, type }
-      }
-    }
-    if (current) ranges.push(current)
-    return ranges
-  }
-
-  const type: 'TIME_OFF' | 'WFH' = requestType === 'WFH' ? 'WFH' : 'TIME_OFF'
-  return [
-    {
-      startDate: new Date(startDate),
-      endDate: new Date(endDate),
-      type,
-    },
-  ]
-}
+const buildIcsRanges = buildIcsRangesFromRequest
