@@ -15,6 +15,8 @@ TimTheMan — there's no webhook to wire up.
 |---|---|
 | `GET /api/integrations/v1/approved-time-off` | Approved time-off (and optionally WFH) entries |
 | `GET /api/integrations/v1/holidays` | US federal holidays for a year/range |
+| `POST /api/integrations/v1/verify-password` | Verify a user's email + password; returns profile |
+| `GET /api/integrations/v1/users` | Full user roster (for mirroring/SSO) |
 
 Base URL: **`https://ogilvyai-production.up.railway.app`**
 
@@ -166,6 +168,131 @@ provider on the consumer side and ignore this endpoint.
 
 ---
 
+## Endpoint 3 — Verify password (SSO credential check)
+
+```
+POST /api/integrations/v1/verify-password
+Authorization: Bearer <INTEGRATION_API_KEY>
+Content-Type: application/json
+
+{ "email": "jane@ogilvy.com", "password": "<plaintext-from-your-server>" }
+```
+
+Used by another internal app (Mel / WPPP Mission Control) so it doesn't
+have to keep its own password database — TimTheMan is the source of truth
+for Ogilvy NYC production-team credentials.
+
+This endpoint always returns **HTTP 200** for credential outcomes — the
+`ok` flag tells you whether the password was valid. Only infra failures
+return 5xx, so your UI can cleanly distinguish "wrong password" from
+"the auth service is down."
+
+### Success — `200`
+
+```json
+{
+  "ok": true,
+  "user": {
+    "id": "ttm_user_abc123",
+    "email": "jane@ogilvy.com",
+    "name": "Jane Producer",
+    "title": null,
+    "role": "producer",
+    "active": true,
+    "imageUrl": "https://.../avatar.png"
+  }
+}
+```
+
+### Failure — `200` with `ok: false`
+
+```json
+{ "ok": false, "reason": "invalid_credentials" }
+```
+
+| `reason` | When |
+|---|---|
+| `invalid_credentials` | Email matched but password didn't |
+| `user_not_found` | No user row with that email |
+| `user_inactive` | (Reserved — not used today; all users are active) |
+| `rate_limited` | More than 5 requests/min from the same IP |
+
+### Notes
+
+- Passwords are checked with bcrypt `compare` (timing-safe).
+- The hash never leaves the server.
+- Rate limit is 5 requests/min/IP, in-memory sliding window. Resets across
+  deploys, which is fine — Mel only retries on user-driven submits.
+- Every attempt is logged (success + failure + email + IP) for audit.
+- `role` is the lowercased TimTheMan account type — see "Role mapping" below.
+
+---
+
+## Endpoint 4 — Users list (roster mirror)
+
+```
+GET /api/integrations/v1/users
+GET /api/integrations/v1/users?active=true
+Authorization: Bearer <INTEGRATION_API_KEY>
+```
+
+Used by Mel/WPPP MI to mirror the full user roster on a ~15-min cron, so it
+has a `users.timTheManId` column it can join against without round-tripping
+to TimTheMan on every page load.
+
+### Response
+
+```json
+{
+  "generatedAt": "2026-05-19T18:21:04.123Z",
+  "count": 38,
+  "users": [
+    {
+      "id": "ttm_user_abc123",
+      "email": "jane@ogilvy.com",
+      "name": "Jane Producer",
+      "title": null,
+      "role": "producer",
+      "active": true,
+      "imageUrl": "https://.../avatar.png"
+    }
+  ]
+}
+```
+
+`?active=true` is accepted but currently a no-op — TimTheMan doesn't track
+an inactive flag yet. Every user is returned with `active: true`.
+
+---
+
+## Role mapping
+
+TimTheMan stores a single `accountType` enum per user. The `role` field in
+both `verify-password` and `users` is the lowercased enum value:
+
+| TimTheMan `role` (raw) | Maps cleanly to Mel? |
+|---|---|
+| `producer` | `producer` |
+| `creative` | (no direct match — Mel may want to drop these from its crew) |
+| `client` | `account` (the "account/PA submitter" role on Mel) |
+| `other` | unknown — Mel-side decides |
+
+TimTheMan does **not** yet model `pa`, `ap`, `sp`, `ep`, `gep`, or
+`flight_director` separately. If Mel needs finer-grained roles, we have a
+few options (in order of effort): keep the mapping client-side, add a
+`title` text column on TimTheMan that Mel reads, or migrate to a real
+roles enum. Ping Isaac and we'll pick one.
+
+---
+
+## User self-serve signup
+
+Not exposed. If Mel sees a user log in with an email TimTheMan doesn't
+have, route them to a friendly "ask Tim to add you to TimTheMan" page.
+Tim can add the user via the existing TimTheMan signup flow or admin UI.
+
+---
+
 ## CORS
 
 The endpoints respond to `OPTIONS` preflight and send these headers:
@@ -262,6 +389,15 @@ curl -fsS "https://ogilvyai-production.up.railway.app/api/integrations/v1/approv
   -H "Authorization: Bearer $TIMTHEMAN_API_KEY" | jq
 
 curl -fsS "https://ogilvyai-production.up.railway.app/api/integrations/v1/holidays?year=2026" \
+  -H "Authorization: Bearer $TIMTHEMAN_API_KEY" | jq
+
+curl -fsS -X POST \
+  -H "Authorization: Bearer $TIMTHEMAN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"jane@ogilvy.com","password":"correct"}' \
+  "https://ogilvyai-production.up.railway.app/api/integrations/v1/verify-password" | jq
+
+curl -fsS "https://ogilvyai-production.up.railway.app/api/integrations/v1/users" \
   -H "Authorization: Bearer $TIMTHEMAN_API_KEY" | jq
 ```
 
