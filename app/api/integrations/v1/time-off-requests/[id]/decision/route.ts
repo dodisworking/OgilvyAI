@@ -12,7 +12,8 @@ export function OPTIONS() {
   return integrationOptions()
 }
 
-export async function POST(request: NextRequest, { params }: { params: { id: string } }) {
+export async function POST(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params
   const auth = checkIntegrationAuth(request)
   if (!auth.ok) return integrationJson({ error: auth.reason }, { status: 401 })
   let body: any
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest, { params }: { params: { id: str
   const email = typeof body.approverEmail === 'string' ? body.approverEmail.trim().toLowerCase() : ''
   const approver = email === TIM_APPROVER.email ? TIM_APPROVER : email === ISAAC_APPROVER.email ? ISAAC_APPROVER : null
   if (!approver) return integrationJson({ error: 'approver_not_allowed' }, { status: 403 })
-  const result = await decideRequest({ requestId: params.id, status, adminNotes: typeof body.adminNotes === 'string' ? body.adminNotes : null, approver })
+  const result = await decideRequest({ requestId: id, status, adminNotes: typeof body.adminNotes === 'string' ? body.adminNotes : null, approver })
   if (!result.ok) return integrationJson({ error: result.error }, { status: result.code })
   return integrationJson({ request: result.request, decidedBy: approver.name })
 }
