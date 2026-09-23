@@ -19,6 +19,29 @@ export function OPTIONS() {
   return integrationOptions()
 }
 
+// GET /api/integrations/v1/time-off-requests?email=<user>&limit=50
+// One person's requests, newest first — every status — so the hub can show
+// "your requests" without a portal login. Bearer auth, same as POST.
+export async function GET(request: NextRequest) {
+  const auth = checkIntegrationAuth(request)
+  if (!auth.ok) return integrationJson({ error: auth.reason }, { status: 401 })
+  const email = (request.nextUrl.searchParams.get('email') ?? '').trim().toLowerCase()
+  if (!email) return integrationJson({ error: 'email is required' }, { status: 400 })
+  const limit = Math.min(200, Math.max(1, Number(request.nextUrl.searchParams.get('limit') ?? 50) || 50))
+  const user = await db.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } })
+  if (!user) return integrationJson({ error: 'user_not_found', email }, { status: 404 })
+  const rows = await db.request.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: limit })
+  const ymd = (d: Date) => d.toISOString().slice(0, 10)
+  return integrationJson({
+    generatedAt: new Date().toISOString(),
+    count: rows.length,
+    requests: rows.map((r) => ({
+      id: r.id, requestType: r.requestType, status: r.status, title: r.title, reason: r.reason, adminNotes: r.adminNotes,
+      startDate: ymd(r.startDate), endDate: ymd(r.endDate), createdAt: r.createdAt.toISOString(), updatedAt: r.updatedAt.toISOString(),
+    })),
+  })
+}
+
 export async function POST(request: NextRequest) {
   const auth = checkIntegrationAuth(request)
   if (!auth.ok) return integrationJson({ error: auth.reason }, { status: 401 })
