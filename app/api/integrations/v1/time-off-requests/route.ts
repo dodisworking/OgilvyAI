@@ -26,12 +26,33 @@ export async function GET(request: NextRequest) {
   const auth = checkIntegrationAuth(request)
   if (!auth.ok) return integrationJson({ error: auth.reason }, { status: 401 })
   const email = (request.nextUrl.searchParams.get('email') ?? '').trim().toLowerCase()
-  if (!email) return integrationJson({ error: 'email is required' }, { status: 400 })
-  const limit = Math.min(200, Math.max(1, Number(request.nextUrl.searchParams.get('limit') ?? 50) || 50))
+  const limit = Math.min(500, Math.max(1, Number(request.nextUrl.searchParams.get('limit') ?? 50) || 50))
+  const ymd = (d: Date) => d.toISOString().slice(0, 10)
+  // No email: everyone's requests in a window (PENDING + APPROVED by
+  // default), so the hub can show who else is out — or asking to be.
+  if (!email) {
+    const from = request.nextUrl.searchParams.get('from') ?? ''
+    const to = request.nextUrl.searchParams.get('to') ?? ''
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return integrationJson({ error: 'email, or from and to (YYYY-MM-DD), are required' }, { status: 400 })
+    const statuses = (request.nextUrl.searchParams.get('status') ?? 'PENDING,APPROVED').split(',').map((s) => s.trim().toUpperCase()).filter((s) => ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'].includes(s)) as Array<'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'>
+    const rows = await db.request.findMany({
+      where: { status: { in: statuses }, startDate: { lte: new Date(to + 'T23:59:59Z') }, endDate: { gte: new Date(from + 'T00:00:00Z') } },
+      include: { user: { select: { name: true, email: true } } },
+      orderBy: { startDate: 'asc' },
+      take: limit,
+    })
+    return integrationJson({
+      generatedAt: new Date().toISOString(),
+      count: rows.length,
+      requests: rows.map((r) => ({
+        id: r.id, userName: r.user.name, userEmail: r.user.email, requestType: r.requestType, status: r.status, title: r.title,
+        startDate: ymd(r.startDate), endDate: ymd(r.endDate), createdAt: r.createdAt.toISOString(),
+      })),
+    })
+  }
   const user = await db.user.findFirst({ where: { email: { equals: email, mode: 'insensitive' } } })
   if (!user) return integrationJson({ error: 'user_not_found', email }, { status: 404 })
   const rows = await db.request.findMany({ where: { userId: user.id }, orderBy: { createdAt: 'desc' }, take: limit })
-  const ymd = (d: Date) => d.toISOString().slice(0, 10)
   return integrationJson({
     generatedAt: new Date().toISOString(),
     count: rows.length,
