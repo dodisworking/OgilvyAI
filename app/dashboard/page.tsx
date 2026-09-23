@@ -256,6 +256,25 @@ export default function Dashboard() {
             </div>
           </div>
           <div className="flex gap-3">
+            {/* Tim Mode — review every submission. Tim, Jess and Isaac see it;
+                it elevates the current login to the admin session (no second
+                password) and opens the admin page. */}
+            {['tim.legallo@ogilvy.com', 'jessica.coccaro@ogilvy.com', 'isaac.boruchowicz@ogilvy.com'].includes((user?.email ?? '').toLowerCase()) && (
+              <button
+                onClick={async () => {
+                  try {
+                    const res = await fetch('/api/admin/elevate', { method: 'POST', credentials: 'include' })
+                    if (res.ok) router.push('/admin')
+                    else alert('Could not open Tim Mode for this account.')
+                  } catch {
+                    alert('Could not open Tim Mode — try again.')
+                  }
+                }}
+                className="px-4 py-2 rounded-lg bg-gradient-to-r from-purple-600 to-pink-600 text-white font-medium hover:from-purple-700 hover:to-pink-700 transition-all shadow-lg"
+              >
+                🛡 Tim Mode — review all submissions
+              </button>
+            )}
             {/* Isaac Mode Button - only for Isaac */}
             {user?.email === 'isaac.boruchowicz@ogilvy.com' && (
               <button
