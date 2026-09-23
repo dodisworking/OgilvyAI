@@ -34,7 +34,7 @@ export async function GET(request: NextRequest) {
     const from = request.nextUrl.searchParams.get('from') ?? ''
     const to = request.nextUrl.searchParams.get('to') ?? ''
     if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return integrationJson({ error: 'email, or from and to (YYYY-MM-DD), are required' }, { status: 400 })
-    const statuses = (request.nextUrl.searchParams.get('status') ?? 'PENDING,APPROVED').split(',').map((s) => s.trim().toUpperCase()).filter((s) => ['PENDING', 'APPROVED', 'REJECTED', 'CANCELLED'].includes(s)) as Array<'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED'>
+    const statuses = (request.nextUrl.searchParams.get('status') ?? 'PENDING,APPROVED').split(',').map((s) => s.trim().toUpperCase()).filter((s) => ['PENDING', 'APPROVED', 'REJECTED'].includes(s)) as Array<'PENDING' | 'APPROVED' | 'REJECTED'>
     const rows = await db.request.findMany({
       where: { status: { in: statuses }, startDate: { lte: new Date(to + 'T23:59:59Z') }, endDate: { gte: new Date(from + 'T00:00:00Z') } },
       include: { user: { select: { name: true, email: true } } },
